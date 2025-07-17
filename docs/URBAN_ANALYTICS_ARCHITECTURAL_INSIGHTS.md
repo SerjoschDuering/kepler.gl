@@ -26,7 +26,9 @@ interface UrbanAnalyticsStore {
     viewport: Viewport;
     mapStyle: MapStyle;
     bounds: Bounds;
-    annotations: Annotation[];
+    // Pre-generated annotations (loaded with Speckle data)
+    annotations: PreGeneratedAnnotation[];
+    regionSummaries: RegionSummary[];
   };
 
   // UI state management with stable interface for canvas/map/visualization interactions
@@ -41,12 +43,12 @@ interface UrbanAnalyticsStore {
       selectedPanels: string[];
       layoutMode: 'comparison' | 'single' | 'overview';
     };
-    // AI integration as part of UI state
+    // AI chat state (real-time interactions)
     ai: {
-      annotations: AIAnnotation[];
-      insights: RegionalInsight[];
-      chatHistory: ChatMessage[];
-      isGenerating: boolean;
+      activeChatBubbles: ChatBubble[];     // Currently open chat interfaces
+      chatHistory: ChatMessage[];         // Conversation history
+      isGenerating: boolean;               // LLM response in progress
+      uiContext: UIContextSnapshot;       // Current state for AI context
     };
   };
 
@@ -274,35 +276,172 @@ const UrbanKeplerGl = injectComponents([
 
 ### 7. AI Integration Architecture
 
-**User Journey for AI Integration:**
-1. **Context-Aware Annotations**: User clicks on map → AI explains what they're seeing
-2. **Insight Generation**: User selects objects → AI summarizes KPIs and relationships
-3. **Comparative Analysis**: User switches between versions → AI highlights key differences
-4. **Smart Explanations**: User hovers over KPI → AI provides contextual interpretation
+**Pre-generated Annotation System:**
+The platform uses a sophisticated annotation layer with pre-generated insights that adapt to user interactions and scorecard contexts.
 
-**Stateless Annotation System:**
+**Core Components:**
+1. **Pre-generated Annotations**: Fixed spatial annotations with positions, created during external preprocessing
+2. **Region Summaries**: Analysis regions with summary KPIs + AI-generated descriptions (external preprocessing)
+3. **Contextual Chat**: Real-time AI responses using region summaries + UI context + external LLM
+
+**Architecture Overview:**
 ```typescript
-interface AIIntegration {
-  // Annotation chat with external API
-  generateAnnotationInsight: (
-    annotation: Annotation,
-    context: AnalysisContext
-  ) => Promise<string>;
+interface AIAnnotationSystem {
+  // Pre-generated annotation data (loaded with Speckle data)
+  annotations: {
+    position: [number, number, number];    // 3D spatial position
+    id: string;
+    analysisCategory: AnalysisCategory;    // Links to specific scorecard
+    summaryText: string;                   // Pre-generated description
+    kpis: Record<string, number>;          // Associated KPI values
+    visibility: {
+      scorecards: string[];                // Which scorecards show this annotation
+      filterConditions: FilterCondition[]; // When to show/hide
+    };
+  }[];
 
-  // Regional summary insights
-  generateRegionalSummary: (
-    geometryData: GeometryObject[],
-    kpis: KPIData[]
-  ) => Promise<RegionalInsight>;
+  // Region summary data (for contextual AI responses)
+  regionSummaries: {
+    regionId: string;
+    bbox: BoundingBox;                     // Spatial bounds
+    summaryKPIs: Record<string, number>;   // Aggregated KPIs for region
+    aiDescription: string;                 // Pre-generated AI description
+    analysisLayer: string;                 // Which analysis this belongs to
+  }[];
 
-  // Contextual explanations
-  explainKPIResults: (
-    kpi: string,
-    value: number,
-    context: SpatialContext
-  ) => Promise<string>;
+  // Real-time chat integration
+  chatContext: {
+    currentScorecard: string;
+    activeFilters: Filter[];
+    visibleLayers: string[];
+    viewportState: Viewport;
+    screenshotCapability: boolean;         // For UI context
+  };
 }
 ```
+
+**User Interaction Patterns:**
+
+**1. Annotation Expansion:**
+```typescript
+// User clicks on pre-existing annotation
+const handleAnnotationClick = (annotationId: string) => {
+  const annotation = getAnnotation(annotationId);
+  
+  // Expand annotation to show chat interface
+  showChatBubble({
+    position: annotation.position,
+    initialContent: annotation.summaryText,
+    context: {
+      annotation,
+      nearbyKPIs: getNearbyKPIs(annotation.position),
+      activeScorecard: getCurrentScorecard()
+    }
+  });
+};
+```
+
+**2. Contextual Spatial Chat:**
+```typescript
+// User clicks anywhere on canvas to ask question
+const handleCanvasClick = (position: [number, number, number]) => {
+  const context = gatherSpatialContext(position);
+  
+  showChatInterface({
+    position,
+    context: {
+      nearbyRegionSummaries: getRegionSummariesNear(position),
+      localKPIs: getKPIsAtPosition(position),
+      uiState: getCurrentUIState(),
+      screenshot: captureViewport(),       // For visual context
+      activeScorecard: getCurrentScorecard()
+    }
+  });
+};
+
+const gatherSpatialContext = (position) => ({
+  // Find relevant pre-generated region summaries
+  regionSummaries: regionSummaries.filter(region => 
+    isPointInBounds(position, region.bbox)
+  ),
+  // Extract local KPI values
+  localKPIs: extractKPIsAtPosition(position),
+  // Current UI context
+  visibleAnnotations: getVisibleAnnotations(),
+  activeFilters: getCurrentFilters(),
+  scorecardState: getCurrentScorecardState()
+});
+```
+
+**3. Visibility Management:**
+```typescript
+// Annotations visibility controlled by scorecard and filters
+const updateAnnotationVisibility = (scorecard: string, filters: Filter[]) => {
+  annotations.forEach(annotation => {
+    annotation.visible = 
+      annotation.visibility.scorecards.includes(scorecard) &&
+      annotation.visibility.filterConditions.every(condition =>
+        evaluateFilterCondition(condition, filters)
+      );
+  });
+};
+```
+
+**4. External LLM Integration:**
+```typescript
+interface ExternalLLMService {
+  askQuestion: (
+    question: string,
+    context: SpatialChatContext
+  ) => Promise<string>;
+}
+
+interface SpatialChatContext {
+  // Pre-generated regional insights
+  regionSummaries: RegionSummary[];
+  annotationInsights: AnnotationData[];
+  
+  // Current state context
+  uiState: {
+    activeScorecard: string;
+    visibleLayers: string[];
+    activeFilters: Filter[];
+    selectedObjects: string[];
+  };
+  
+  // Visual context
+  screenshot?: string;               // Base64 encoded viewport capture
+  kpiValues: Record<string, number>; // Current KPI values at query location
+  
+  // Spatial context
+  queryPosition: [number, number, number];
+  nearbyGeometry: GeometryObject[];
+}
+
+const processContextualQuestion = async (
+  question: string, 
+  position: [number, number, number]
+) => {
+  const context: SpatialChatContext = {
+    regionSummaries: getRegionSummariesNear(position),
+    annotationInsights: getNearbyAnnotations(position),
+    uiState: getCurrentUIState(),
+    screenshot: await captureViewport(),
+    kpiValues: getKPIsAtPosition(position),
+    queryPosition: position,
+    nearbyGeometry: getGeometryNear(position)
+  };
+  
+  return await externalLLMService.askQuestion(question, context);
+};
+```
+
+**Key Benefits:**
+- **Performance**: Pre-generated annotations reduce real-time computation
+- **Consistency**: Standardized regional summaries ensure coherent explanations
+- **Context-Aware**: Rich spatial and UI context for better AI responses
+- **Scalable**: External preprocessing can handle complex analysis descriptions
+- **Interactive**: Seamless chat integration with existing annotations
 
 ## Implementation Roadmap
 

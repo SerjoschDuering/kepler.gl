@@ -29,7 +29,9 @@ interface UrbanAnalyticsStore {
     viewport: Viewport;
     mapStyle: MapStyle;
     bounds: Bounds;
-    annotations: Annotation[];
+    // Pre-generated annotations (loaded with Speckle data)
+    annotations: PreGeneratedAnnotation[];
+    regionSummaries: RegionSummary[];
   };
 
   // UI state with stable interface for visualization interactions
@@ -43,12 +45,12 @@ interface UrbanAnalyticsStore {
       selectedPanels: string[];
       layoutMode: 'comparison' | 'single' | 'overview';
     };
-    // AI integration as part of UI state
+    // AI chat state (real-time interactions)
     ai: {
-      annotations: AIAnnotation[];
-      insights: RegionalInsight[];
-      chatHistory: ChatMessage[];
-      isGenerating: boolean;
+      activeChatBubbles: ChatBubble[];     // Currently open chat interfaces
+      chatHistory: ChatMessage[];         // Conversation history
+      isGenerating: boolean;               // LLM response in progress
+      uiContext: UIContextSnapshot;       // Current state for AI context
     };
   };
 
@@ -735,48 +737,150 @@ const useOptimizedSelectors = () => {
 };
 ```
 
-## 7. AI Integration Patterns
+## 7. AI Integration Patterns - Speckle-Based Annotations
+
+**Architecture Overview:**
+AI annotations and region summaries are stored directly in Speckle geometry objects as JSON data, loaded with the main dataset.
 
 ```typescript
-interface AIService {
-  generateAnnotationInsight(
-    annotation: Annotation,
-    context: AnalysisContext
-  ): Promise<string>;
-
-  generateRegionalSummary(
-    geometryData: GeometryObject[],
-    kpis: KPIData[]
-  ): Promise<RegionalInsight>;
+// Speckle geometry object with attached annotation data
+interface SpeckleAnnotationGeometry {
+  id: string;
+  speckle_type: 'Point'; // Point geometry for annotations
+  geometry: {
+    coordinates: [number, number, number]; // 3D position
+  };
+  // JSON annotation data attached to geometry
+  annotationData: {
+    summaryText: string;                   // Pre-generated AI description
+    analysisCategory: AnalysisCategory;    // Which analysis this relates to
+    kpis: Record<string, number>;          // Associated KPI values
+    visibility: {
+      scorecards: string[];                // Which scorecards show this
+      filterConditions: FilterCondition[]; // When to show/hide
+    };
+  };
 }
 
-class UrbanAnalyticsAIService implements AIService {
-  private apiUrl: string;
-  private apiKey: string;
+// Speckle geometry object with region summary data
+interface SpeckleRegionGeometry {
+  id: string;
+  speckle_type: 'Curve' | 'Polygon';     // Boundary geometry for regions
+  geometry: {
+    boundary: Polygon;                     // Region boundary
+  };
+  // JSON region summary attached to geometry
+  regionData: {
+    summaryKPIs: Record<string, number>;   // Aggregated stats for region
+    aiDescription: string;                 // Pre-generated AI description
+    analysisLayer: string;                 // Which analysis layer
+  };
+}
 
-  constructor(config: { apiUrl: string; apiKey: string }) {
-    this.apiUrl = config.apiUrl;
-    this.apiKey = config.apiKey;
+// Data extraction from Speckle objects
+class SpeckleAIDataExtractor {
+  extractAnnotations(speckleObjects: SpeckleObject[]): PreGeneratedAnnotation[] {
+    return speckleObjects
+      .filter(obj => obj.speckle_type === 'Point' && obj.annotationData)
+      .map(obj => ({
+        id: obj.id,
+        position: obj.geometry.coordinates,
+        summaryText: obj.annotationData.summaryText,
+        analysisCategory: obj.annotationData.analysisCategory,
+        kpis: obj.annotationData.kpis,
+        visibility: obj.annotationData.visibility
+      }));
   }
 
-  async generateAnnotationInsight(
-    annotation: Annotation,
-    context: AnalysisContext
+  extractRegionSummaries(speckleObjects: SpeckleObject[]): RegionSummary[] {
+    return speckleObjects
+      .filter(obj => 
+        ['Curve', 'Polygon'].includes(obj.speckle_type) && 
+        obj.regionData
+      )
+      .map(obj => ({
+        regionId: obj.id,
+        bbox: this.calculateBoundingBox(obj.geometry.boundary),
+        summaryKPIs: obj.regionData.summaryKPIs,
+        aiDescription: obj.regionData.aiDescription,
+        analysisLayer: obj.regionData.analysisLayer,
+        geometry: obj.geometry.boundary
+      }));
+  }
+
+  private calculateBoundingBox(boundary: Polygon): BoundingBox {
+    // Calculate bbox from polygon coordinates
+    const coords = boundary.coordinates[0];
+    return {
+      minX: Math.min(...coords.map(c => c[0])),
+      minY: Math.min(...coords.map(c => c[1])),
+      maxX: Math.max(...coords.map(c => c[0])),
+      maxY: Math.max(...coords.map(c => c[1]))
+    };
+  }
+}
+
+// Annotation management with Speckle integration
+class SpeckleAnnotationManager {
+  private annotations: PreGeneratedAnnotation[];
+  private regionSummaries: RegionSummary[];
+
+  constructor(speckleObjects: SpeckleObject[]) {
+    const extractor = new SpeckleAIDataExtractor();
+    this.annotations = extractor.extractAnnotations(speckleObjects);
+    this.regionSummaries = extractor.extractRegionSummaries(speckleObjects);
+  }
+
+  updateVisibilityByScorecard(scorecardId: string, activeFilters: Filter[]) {
+    this.annotations.forEach(annotation => {
+      annotation.visible = 
+        annotation.visibility.scorecards.includes(scorecardId) &&
+        annotation.visibility.filterConditions.every(condition =>
+          this.evaluateFilterCondition(condition, activeFilters)
+        );
+    });
+  }
+
+  getRegionSummaryAtPosition(position: [number, number, number]): RegionSummary | null {
+    return this.regionSummaries.find(region =>
+      this.isPointInRegion(position, region.geometry)
+    );
+  }
+
+  getNearbyAnnotations(position: [number, number, number], radius = 100): PreGeneratedAnnotation[] {
+    return this.annotations.filter(annotation =>
+      this.calculateDistance(position, annotation.position) <= radius
+    );
+  }
+}
+
+// External LLM service with Speckle context
+class ExternalLLMService {
+  async askSpatialQuestion(
+    question: string,
+    context: SpatialChatContext
   ): Promise<string> {
     const payload = {
-      annotation: {
-        type: annotation.type,
-        position: annotation.position,
-        content: annotation.content
-      },
+      question,
       context: {
-        selectedObjects: context.selectedObjects,
-        kpis: context.kpis,
-        timeRange: context.timeRange
+        // Speckle-based data
+        regionSummary: context.regionSummary?.aiDescription,
+        regionKPIs: context.regionSummary?.summaryKPIs,
+        nearbyAnnotations: context.nearbyAnnotations.map(a => a.summaryText),
+        
+        // Current UI state
+        activeScorecard: context.uiState.activeScorecard,
+        visibleLayers: context.uiState.visibleLayers,
+        activeFilters: context.uiState.activeFilters,
+        
+        // Visual context
+        screenshot: context.screenshot,
+        queryPosition: context.queryPosition,
+        localKPIs: context.kpiValues
       }
     };
 
-    const response = await fetch(`${this.apiUrl}/annotations/insights`, {
+    const response = await fetch(`${this.apiUrl}/spatial/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -785,40 +889,66 @@ class UrbanAnalyticsAIService implements AIService {
       body: JSON.stringify(payload)
     });
 
-    const result = await response.json();
-    return result.insight;
+    return (await response.json()).response;
   }
+}
 
-  async generateRegionalSummary(
-    geometryData: GeometryObject[],
-    kpis: KPIData[]
-  ): Promise<RegionalInsight> {
-    const aggregatedData = this.aggregateRegionalData(geometryData, kpis);
+// Complete chat integration
+class SpatialChatManager {
+  constructor(
+    private annotationManager: SpeckleAnnotationManager,
+    private llmService: ExternalLLMService
+  ) {}
 
-    const response = await fetch(`${this.apiUrl}/regional/summary`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({ data: aggregatedData })
+  // Handle click on pre-existing Speckle annotation
+  handleAnnotationClick(annotationId: string): ChatBubble {
+    const annotation = this.annotationManager.getAnnotation(annotationId);
+    
+    return this.createChatBubble({
+      position: annotation.position,
+      initialContent: annotation.summaryText,
+      context: {
+        annotation,
+        regionSummary: this.annotationManager.getRegionSummaryAtPosition(annotation.position),
+        activeScorecard: this.getCurrentScorecard()
+      }
     });
-
-    return await response.json();
   }
 
-  private aggregateRegionalData(
-    geometryData: GeometryObject[],
-    kpis: KPIData[]
-  ): RegionalAggregation {
-    // Implement spatial aggregation logic
-    return {
-      totalObjects: geometryData.length,
-      avgKPIs: this.computeAverageKPIs(kpis),
-      spatialDistribution: this.computeSpatialDistribution(geometryData),
-      trends: this.identifyTrends(kpis)
+  // Handle click anywhere on canvas
+  async handleCanvasClick(
+    position: [number, number, number], 
+    question: string
+  ): Promise<ChatBubble> {
+    const context: SpatialChatContext = {
+      // Speckle-based contextual data
+      regionSummary: this.annotationManager.getRegionSummaryAtPosition(position),
+      nearbyAnnotations: this.annotationManager.getNearbyAnnotations(position),
+      
+      // Current state
+      uiState: this.getCurrentUIState(),
+      queryPosition: position,
+      screenshot: await this.captureViewport(),
+      kpiValues: this.getKPIsAtPosition(position)
     };
+
+    const response = await this.llmService.askSpatialQuestion(question, context);
+    
+    return this.createChatBubble({
+      position,
+      content: response,
+      context
+    });
   }
+}
+
+interface SpatialChatContext {
+  regionSummary: RegionSummary | null;       // From Speckle curve/polygon geometry
+  nearbyAnnotations: PreGeneratedAnnotation[]; // From Speckle point geometry
+  uiState: UIState;
+  queryPosition: [number, number, number];
+  screenshot: string;
+  kpiValues: Record<string, number>;
 }
 ```
 

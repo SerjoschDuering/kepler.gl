@@ -28,27 +28,33 @@ As a planner evaluating a design variant, I want to open the Wind-Comfort scorec
 - Areas below comfort threshold receive yellow call-outs
 - Preset filters applied: `geometry_type: "grid_cell"`, `analysis_type: "wind_comfort"`
 
-**3. Read annotations**
-- Hovering an annotation reveals tooltip:
+**3. Read pre-generated annotations**
+- Hovering a pre-existing annotation reveals tooltip:
   *"Low shading near tower – strong gusts 11 AM – 3 PM"*
-- AI-generated based on spatial context and KPI values
+- Annotations are pre-generated during external preprocessing
+- Visibility controlled by current scorecard and filter settings
 
-**4. Ask an in-place question**
-- Small "+" on call-out opens chat bubble anchored to that spot
-- User types: "Why is this spot so windy?"
-- AI receives: annotation position, local KPI values, nearby geometry
-- Inline AI answer appears with spatial context
+**4. Expand annotation to chat**
+- Click on pre-existing annotation expands it to show chat interface
+- Initial content shows pre-generated summary text
+- User can ask follow-up questions: "Why is this spot so windy?"
+- AI receives: annotation data, region summaries, UI context, screenshot
+- Enhanced answer combines pre-generated insights with real-time context
 
 **5. Hover exploration**
 - Moving cursor across grid shows live tooltips
 - Displays: wind speed, comfort category, any extra configured metrics
 - Real-time KPI computation using optimized aggregation functions
 
-**6. Contextual chat anywhere**
-- User right-clicks any point on canvas
-- Text box appears
-- Question + answer anchored to that location
-- AI context includes: clicked position, visible KPIs, active filters
+**6. Contextual spatial chat**
+- User right-clicks anywhere on canvas to ask region-specific questions
+- Chat interface appears anchored to that location
+- AI context includes: 
+  - Nearby region summaries (pre-generated)
+  - Local KPI values at clicked position
+  - Current UI state and active scorecard
+  - Screenshot for visual context
+  - Nearby geometry and annotations
 
 **7. Filter via pie-chart**
 - User clicks pie slice "Comfortable while running"
@@ -76,7 +82,11 @@ As a planner evaluating a design variant, I want to open the Wind-Comfort scorec
 - **Data Flow**: `grid_cells` dataset → `wind_comfort_category` field → pie chart categories
 - **KPI Computation**: Uses `withinBounds` aggregation for Lawson categories
 - **Filter Management**: Scorecard presets override user selections when switching
-- **AI Context**: Spatial position + active KPIs + visible geometry types
+- **AI Architecture**: 
+  - Pre-generated annotations loaded with Speckle data
+  - Region summaries provide contextual AI responses
+  - External LLM integration with rich spatial context
+  - Screenshot capture for visual understanding
 
 ---
 
