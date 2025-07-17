@@ -4,9 +4,62 @@
 
 This document defines the data structure and taxonomy mapping for the Urban Analytics Platform, establishing how Speckle BIM data should be organized, accessed, and visualized. The taxonomy is designed to be compatible with kepler.gl's data processing patterns while supporting rich urban analytics workflows.
 
+### **System Architecture Overview**
+
+The Urban Analytics Platform processes data through the following pipeline:
+
+**Speckle Data → Geometry Grouping → Analysis Attribution → Scorecard Visualization → User Interaction**
+
+1. **Speckle Objects**: List of geometry objects with attributes from different design variants
+2. **Geometry Grouping**: Objects grouped by `geometry_type` attribute (buildings, trees, roads, etc.)
+3. **Analysis Attribution**: Each geometry carries analysis results as attributes following naming conventions
+4. **Scorecard System**: JSON-configured cards display KPIs and charts for specific analysis categories
+5. **User Interaction**: Click, hover, and chat interactions provide contextual insights
+
+### **Object Types and Relationships**
+
+The platform handles several core object types:
+
+**🏢 Spatial Entities (Datasets)**
+- **Buildings Dataset**: Individual buildings with microclimate, energy, accessibility KPIs
+- **Trees Dataset**: Individual trees with biodiversity, shading, air quality KPIs  
+- **Roads Dataset**: Road segments with mobility, noise, accessibility KPIs
+- **Grid Cells Dataset**: Analysis grid with aggregated environmental KPIs
+
+**📊 Analysis Objects**
+- **KPI Definitions**: Reusable metric definitions with aggregation methods and thresholds
+- **Scorecard Configurations**: JSON templates defining chart layouts and filtering presets
+- **Chart Categories**: Predefined ranges for converting numeric KPIs to categorical displays
+
+**🎯 Interaction Objects**
+- **AI Annotations**: Contextual explanations anchored to specific locations
+- **Filter Presets**: Scorecard-specific display configurations
+- **Visual States**: Layer visibility and styling configurations
+
+### **Data Flow Example (Wind Comfort Scorecard)**
+
+1. **Speckle Input**: 2,000 grid cell objects with `analysis_wind_comfort_category` attributes
+2. **Geometry Grouping**: Objects grouped by `geometry_type: "grid_cell"`
+3. **KPI Computation**: 
+   - `avg_windspeed`: Average of all grid cell wind speeds
+   - `comfort_zones`: Count of cells in each Lawson category
+4. **Chart Generation**:
+   - **Pie Chart**: 5 slices for Lawson categories (Comfortable, Moderate, etc.)
+   - **Histogram**: Wind speed distribution (static, non-interactive)
+5. **Canvas Visualization**: Grid cells colored by comfort category
+6. **User Interaction**: Click pie slice → filter grid cells → show only selected category
+
+This approach ensures **one analysis result type per geometry type** while maintaining flexibility for multiple KPI perspectives on the same data.
+
 ## Core Data Taxonomy
 
 ### 1. Geometry Types Classification
+
+**Speckle Data Grouping Strategy:**
+Speckle provides a list of geometry objects with attributes. One attribute (likely `geometry_type` or `speckle_type`) defines the GeometryType for efficient grouping. This approach means we can show **one analysis result type per geometry type at a time**, which actually simplifies the UI and reduces cognitive load.
+
+**Attribute Naming Scheme:**
+Geometry attributes follow consistent naming conventions (e.g., `analysis_wind_comfort_category`, `analysis_microclimate_temperature_c`) enabling automated field detection and efficient data structure construction.
 
 ```typescript
 enum GeometryType {
@@ -68,33 +121,75 @@ enum AnalysisCategory {
 
 ### 3. Standard KPI Naming Convention
 
+**Unified KPI Definition:**
+You're absolutely right! `KPIField` and `KPI_NAMING_PATTERNS` should be unified into a single comprehensive definition:
+
 ```typescript
-interface KPIField {
+interface KPIDefinition {
+  // Core identification
+  id: string;                            // e.g., "analysis_wind_comfort_avg"
   category: AnalysisCategory;
   metric: string;
   unit?: string;
   analysisType: 'quantitative' | 'qualitative' | 'categorical';
-  // Extended attributes for better UX and AI understanding
-  shortName?: string;                    // e.g., "Temp" for "Temperature"
+  
+  // Display attributes
+  shortName: string;                     // e.g., "Wind Speed"
   description: string;                   // Full description for tooltips/AI
   descriptionShort: string;              // Brief description for UI
+  
+  // Computation attributes
   defaultAggregation: AggregationMethod; // Default aggregation method
-  interpretationHighLow: {               // How to interpret high/low values
+  availableAggregations: AggregationMethod[]; // Allowed aggregation types
+  
+  // Value interpretation
+  interpretationHighLow: {
     high: 'good' | 'bad' | 'neutral';
     low: 'good' | 'bad' | 'neutral';
     explanation: string;
   };
+  
+  // Threshold and categorization
+  thresholds?: {
+    warning: number;
+    critical: number;
+  };
+  categories?: Array<{
+    label: string;
+    min: number;
+    max: number;
+    color: string;
+  }>;
+  
+  // AI integration
   aiContext?: string;                    // Additional context for LLM understanding
 }
 
-// Standard naming pattern: analysis_{category}_{metric}_{unit?}
-const KPI_NAMING_PATTERNS = {
+// Unified KPI Registry (replaces separate naming patterns)
+const KPI_REGISTRY: Record<string, KPIDefinition> = {
   // Microclimate
   'analysis_microclimate_temperature_c': {
+    id: 'analysis_microclimate_temperature_c',
     category: AnalysisCategory.MICROCLIMATE,
     metric: 'temperature',
     unit: 'celsius',
-    analysisType: 'quantitative'
+    analysisType: 'quantitative',
+    shortName: 'Temperature',
+    description: 'Ambient air temperature measured at object location',
+    descriptionShort: 'Air Temp (°C)',
+    defaultAggregation: 'average',
+    availableAggregations: ['average', 'min', 'max', 'withinBounds'],
+    interpretationHighLow: {
+      high: 'bad',
+      low: 'good',
+      explanation: 'Lower temperatures indicate better thermal comfort'
+    },
+    thresholds: { warning: 28, critical: 35 },
+    categories: [
+      { label: 'Comfortable', min: 15, max: 25, color: '#22c55e' },
+      { label: 'Warm', min: 25, max: 30, color: '#f59e0b' },
+      { label: 'Hot', min: 30, max: 50, color: '#ef4444' }
+    ]
   },
   'analysis_microclimate_humidity_percent': {
     category: AnalysisCategory.MICROCLIMATE,
@@ -404,14 +499,20 @@ interface CategoryDefinition {
   }>;
 }
 
-// Example configuration
+// Field Categories = How we classify different types of data fields
+// This helps the system understand what type of data each field contains
 const urbanAnalyticsConfig: FieldCategoryConfig = {
   version: "1.0",
   fieldCategories: {
+    // Analysis fields (carry KPI data)
     "analysis_microclimate_temperature_c": AnalysisCategory.MICROCLIMATE,
     "analysis_solar_annual_hours": AnalysisCategory.SOLAR_ACCESS,
+    // Metadata fields (describe the object)
     "building_type": "metadata",
-    "geometry.centroid": "geometry"
+    "speckle_type": "metadata",
+    // Geometry fields (spatial data)
+    "geometry.centroid": "geometry",
+    "geometry.bbox": "geometry"
   },
   kpiDefinitions: {
     "analysis_microclimate_temperature_c": {
@@ -458,11 +559,17 @@ interface ScorecardConfiguration {
           type: 'histogram' | 'pie' | 'line' | 'bar' | 'scatter';
           title: string;
           field: string;
-          aggregation?: 'sum' | 'average' | 'count' | 'max' | 'min';
+          // Extended aggregation types including "withinBounds" for threshold-based analysis
+          aggregation?: 'sum' | 'average' | 'count' | 'max' | 'min' | 'withinBounds';
+          // Arguments for withinBounds aggregation
+          aggregationArgs?: {
+            bounds: Array<{start: number, end: number, label: string}>;
+            countType: 'objects' | 'percentage';
+          };
           binCount?: number;
           colorScheme?: string;
           clickAction: {
-            type: 'filter' | 'highlight' | 'select';
+            type: 'filter' | 'highlight' | 'select' | 'none';
             field?: string;
           };
         }
@@ -472,25 +579,49 @@ interface ScorecardConfiguration {
         [kpiId: string]: {
           title: string;
           field: string;
-          aggregation: 'sum' | 'average' | 'count' | 'max' | 'min';
-          format: string; // e.g., ".2f", ".0%", "$,.0f"
-          threshold?: {
-            warning: number;
-            critical: number;
+          // Extended aggregation including percentile and withinBounds
+          aggregation: 'sum' | 'average' | 'count' | 'max' | 'min' | 'percentile' | 'withinBounds';
+          // Arguments for complex aggregations
+          aggregationArgs?: {
+            percentile?: number; // e.g., 90 for 90th percentile
+            bounds?: Array<{start: number, end: number}>; // for withinBounds
+            targetValue?: number; // for divergence calculations
           };
-          trend?: {
+          format: string; // e.g., ".2f", ".0%", "$,.0f"
+
+          // Flexible threshold system supporting multiple threshold types
+          threshold?: {
+            type: 'absolute' | 'relative' | 'divergence';
+            // Absolute thresholds (fixed values)
+            warning?: number;
+            critical?: number;
+            // Relative thresholds (percentage of mean/median)
+            warningPercent?: number;
+            criticalPercent?: number;
+            // Divergence from target value
+            targetValue?: number;
+            maxDivergence?: number;
+          };
+          // Version comparison instead of time trends
+          comparison?: {
             enabled: boolean;
-            period: 'month' | 'quarter' | 'year';
+            baseVersion: string; // Speckle commit ID to compare against
+            showDifference: boolean;
+            differenceType: 'absolute' | 'percentage';
           };
         }
       };
-
+      // Filters = Preset display configurations applied when scorecard activates
+      // These are NOT user controls, but automatic filters that shape what data is shown
+      // User can override these through chart interactions (clicking pie slices, etc.)
       filters: {
         [filterId: string]: {
           type: 'range' | 'multiSelect' | 'timeRange' | 'category';
           field: string;
           defaultValue?: any;
           options?: string[];
+          // Whether this filter can be overridden by user interactions
+          userOverridable: boolean;
         }
       };
 
@@ -539,16 +670,22 @@ interface ScorecardConfiguration {
           "aggregation": "count",
           // For numeric data in pie charts, define categories:
           "categories": {
-            "Comfortable": {"field": "comfort_score", "range": [70, 100]},
-            "Moderate": {"field": "comfort_score", "range": [40, 70]},
-            "Uncomfortable": {"field": "comfort_score", "range": [0, 40]}
+            // KPI-based approach is cleaner and more reusable
+            // Each category references a pre-defined KPI with withinBounds aggregation
+            "Comfortable": { "kpiId": "comfort_comfortable" },
+            "Moderate": { "kpiId": "comfort_moderate" },
+            "Uncomfortable": { "kpiId": "comfort_uncomfortable" }
+            // These KPIs are defined in the KPI registry with withinBounds aggregation
+            // and their respective range configurations
           },
           "clickAction": {
             "type": "highlight"
           }
         }
       },
-
+      // KPIs are defined separately in the KPI Registry and referenced here
+      // Each KPI card is a UI component displaying a formatted KPI value
+      // This section assigns KPIs to card positions in the scorecard layout
       "kpis": {
         "avg_temperature": {
           "title": "Average Temperature",
@@ -570,6 +707,10 @@ interface ScorecardConfiguration {
 
       "filters": {
         // Only these filters are active for this scorecard, others are disabled
+        // Scorecard filters are PRESETS, not user controls
+        // When scorecard activates: automatically apply these filters
+        // User interactions (chart clicks) can override these temporarily
+        // Switching scorecards resets to new scorecard's preset filters
         "building_type": {
           "type": "multiSelect", // Determines filter UI component and function
           "field": "building_type",
@@ -593,8 +734,9 @@ interface ScorecardConfiguration {
 ```
 
 ## Data Processing Pipeline
+### 1. Speckle to Deck.gl Transformation
 
-### 1. Speckle to Kepler.gl Transformation
+**Note**: The platform uses deck.gl with a map framework (not kepler.gl directly), but leverages kepler.gl's proven data processing patterns.
 
 ```typescript
 interface DataProcessingPipeline {
