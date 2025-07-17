@@ -1,0 +1,3340 @@
+From 252e190f5258eb9b1b32c8b30703fe5e426b2e76 Mon Sep 17 00:00:00 2001
+From: SerjoschDuering <tralala798@gmail.com>
+Date: Thu, 17 Jul 2025 08:20:31 +0200
+Subject: [PATCH 1/3] ok
+
+---
+ CLAUDE.md                                     | 288 ++++++
+ .../URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md | 347 ++++++++
+ docs/URBAN_ANALYTICS_DATA_TAXONOMY.md         | 682 +++++++++++++++
+ ...URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md | 825 ++++++++++++++++++
+ 4 files changed, 2142 insertions(+)
+ create mode 100644 CLAUDE.md
+ create mode 100644 docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
+ create mode 100644 docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
+ create mode 100644 docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+new file mode 100644
+index 00000000..061e9af9
+--- /dev/null
++++ b/CLAUDE.md
+@@ -0,0 +1,288 @@
++# CLAUDE.md
++
++This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
++
++## Project Goals and Technical Approach
++
++This project is being analyzed to understand how to build custom applications on top of deck.gl and mapbox with the following specific requirements:
++
++- **State Management**: Using Zustand (NOT Redux) for application state
++- **Data Integration**: Fetching from Speckle streams in the background
++- **Rich Geometry Data**: Handling geometry objects with many attributes (KPIs, datapoints)
++- **Interactive Filtering**: Working patterns for filtering layers/objects via attribute ranges (numeric, categorical)
++- **Real-time Visualization**: 2D charts that update in real-time, on-the-fly KPI computation for changing selections
++- **Map Enhancements**: Annotations on canvas/map, terrain and satellite image layers
++- **Version Control**: Switching between versions of the data
++- **Custom UI**: Custom widgets that set filters when clicked or customized
++
++## Common Development Commands
++
++### Build and Development
++```bash
++# Development server
++yarn start
++
++# Build for production
++yarn build
++
++# Build UMD bundle
++yarn build:umd
++
++# Build TypeScript declarations
++yarn build:types
++
++# Run tests
++yarn test            # All tests
++yarn test-jest       # Jest tests only
++yarn test-tape       # Tape tests only
++yarn test-headless   # Headless browser tests
++```
++
++### Code Quality
++```bash
++# Linting and TypeScript checking
++yarn lint            # ESLint + TypeScript check
++yarn typescript      # TypeScript check only
++yarn prettier-all   # Format all code
++
++# Coverage
++yarn cover          # Full coverage report
++```
++
++### Example Applications
++```bash
++# Various example applications
++yarn start:deck                    # Demo with deck.gl
++yarn start:custom-reducer          # Custom reducer example
++yarn start:replace-component       # Component replacement example
++yarn start:custom-theme           # Custom theme example
++yarn start:node-app               # Node.js server example
++```
++
++## Architecture Overview
++
++### State Management Architecture (Redux → Zustand Migration Context)
++
++kepler.gl uses a sophisticated Redux-based state management system with the following key patterns:
++
++**Current Redux Structure:**
++```typescript
++KeplerGlState {
++  visState: {
++    layers: Layer[],
++    filters: Filter[],
++    datasets: {[id: string]: Dataset},
++    layerData: {[id: string]: LayerData},
++    interactionConfig: InteractionConfig
++  },
++  mapState: MapState,
++  mapStyle: MapStyle,
++  uiState: UiState
++}
++```
++
++**Key Patterns for Zustand Migration:**
++- **Functional Updates**: Each state slice uses pure updater functions
++- **Immutable Patterns**: Extensive use of spread operators and helper functions
++- **Cross-Cutting Concerns**: "Composer" functions handle actions affecting multiple state slices
++- **Action Patterns**: Consistent action structure with typed payloads
++
++### Layer System Architecture
++
++**Base Layer Structure:**
++- All layers inherit from `BaseLayer` class
++- **Visual Channels**: Standardized mapping of data attributes to visual properties (color, size, height)
++- **Column Modes**: Support for different data formats (lat/lng, GeoJSON, GeoArrow)
++- **Update Triggers**: Efficient change detection for re-rendering
++
++**Key Layer Types:**
++- **Point Layer**: Basic point visualization with 3D support
++- **Aggregation Layers**: Grid, Hexagon, Heatmap for spatial aggregation
++- **Arc/Line Layers**: Connection-based visualization
++- **Polygon Layers**: Complex geometry support with extrusion
++
++### Filtering and Data Processing
++
++**Filter Types:**
++- **Range Filter**: Numeric ranges with histogram visualization
++- **Multi-Select Filter**: Categorical value selection
++- **Time Range Filter**: Temporal data with animation support
++- **Polygon Filter**: Spatial filtering with drawn polygons
++
++**Data Processing Pipeline:**
++1. Raw data → Datasets (via file processors)
++2. Datasets → Filtered datasets (via filters)
++3. Filtered datasets → Layer data (via layer processors)
++4. Layer data → Rendered visualization (via deck.gl)
++
++**GPU vs CPU Filtering:**
++- GPU filtering for real-time performance with large datasets
++- CPU filtering for complex logic
++- Hybrid approach for optimal performance
++
++### Visual Channel System
++
++Critical for mapping rich Speckle attributes to visual properties:
++
++```typescript
++visualChannels = {
++  color: {
++    field: 'colorField',      // Data attribute
++    scale: 'colorScale',      // Scale type (linear, log, quantile, ordinal)
++    domain: 'colorDomain',    // Data range
++    range: 'colorRange',     // Visual range (colors)
++  },
++  size: {
++    field: 'sizeField',
++    scale: 'sizeScale',
++    domain: 'sizeDomain',
++    range: 'sizeRange',
++  }
++}
++```
++
++## Working with Rich Geometry Data (Speckle Integration)
++
++### Data Container Interface
++- **RowDataContainer**: Standard array/object data
++- **ArrowDataContainer**: Apache Arrow columnar data (recommended for large datasets)
++- **IndexedDataContainer**: Memory-optimized indexed access
++
++### Rich Attribute Support
++- **Nested property access**: Support for `object.property.subproperty` paths
++- **Field typing**: Automatic detection of numeric, categorical, temporal data
++- **Custom value accessors**: Functions to extract values from complex objects
++- **Metadata preservation**: Maintains original object structure
++
++## Key Patterns for Custom Applications
++
++### 1. Custom Filter Widgets
++```typescript
++// Filter component pattern
++const CustomFilter = ({filter, setFilter, setFilterPlot}) => (
++  <CustomSlider
++    range={filter.domain}
++    value={filter.value}
++    onChange={setFilter}
++  />
++);
++```
++
++### 2. Real-time KPI Computation
++- Use filter synchronization for cross-dataset filtering
++- Implement computed values that update based on selection changes
++- Leverage the interaction system for selection-based calculations
++
++### 3. Custom Layer Types
++- Extend base layers for specialized visualization needs
++- Implement custom geometry processing for Speckle objects
++- Add specialized interaction handlers for construction workflows
++
++### 4. Performance Optimization
++- Use Arrow data containers for large datasets
++- Implement efficient data accessors for nested properties
++- Leverage aggregation layers for overview visualizations
++
++## File Structure and Key Locations
++
++### Core Architecture
++- `/src/reducers/` - Redux state management (study for Zustand patterns)
++- `/src/actions/` - Action creators and types
++- `/src/layers/` - Layer implementations and visual channels
++- `/src/utils/filter-utils.ts` - Filtering logic and utilities
++- `/src/components/` - UI components and interactions
++
++### Examples for Reference
++- `/examples/demo-app/` - Main demo application
++- `/examples/custom-reducer/` - Custom state management example
++- `/examples/replace-component/` - Component customization
++- `/examples/custom-theme/` - Theming and styling
++
++### Key Files for Custom Development
++- `/src/layers/src/base-layer.ts` - Base layer class
++- `/src/utils/src/filter-utils.ts` - Filter system implementation
++- `/src/reducers/src/vis-state-updaters.ts` - State update patterns
++- `/src/components/src/filters/` - Filter UI components
++
++## Dependencies and Ecosystem
++
++### Core Dependencies
++- **deck.gl**: WebGL-based visualization framework
++- **mapbox-gl**: Map rendering and interaction
++- **react**: UI framework
++- **redux**: State management (to be replaced with Zustand)
++- **styled-components**: CSS-in-JS styling
++
++### Data Processing
++- **Apache Arrow**: Columnar data format for performance
++- **d3-array**: Data manipulation and scaling
++- **@loaders.gl**: Data loading and parsing
++
++### Build and Development
++- **TypeScript**: Type safety and development experience
++- **Babel**: JavaScript transpilation
++- **webpack**: Module bundling
++- **jest**: Testing framework
++
++## Testing Strategy
++
++### Test Types
++- **Unit Tests**: Individual component and utility testing
++- **Integration Tests**: Layer and filter system testing
++- **Browser Tests**: Full application testing with headless browsers
++
++### Running Tests
++```bash
++yarn test-node      # Node.js unit tests
++yarn test-browser   # Browser-based tests
++yarn test-headless  # Automated browser testing
++```
++
++## Development Workflow
++
++### 1. Setting up Development Environment
++```bash
++# Install dependencies
++yarn install
++
++# Start development server
++yarn start
++```
++
++### 2. Creating Custom Layers
++- Extend `BaseLayer` class
++- Implement required methods (`initializeLayerConfig`, `updateLayerData`, etc.)
++- Define visual channels for attribute mapping
++- Add layer-specific UI components
++
++### 3. Implementing Custom Filters
++- Create filter configuration object
++- Implement filter validation logic
++- Build UI component for filter interaction
++- Connect to state management system
++
++### 4. Performance Considerations
++- Use GPU filtering for large datasets
++- Implement efficient data accessors
++- Leverage deck.gl's update triggers system
++- Consider using Arrow data containers for large datasets
++
++## Common Pitfalls and Solutions
++
++### 1. Performance Issues
++- **Problem**: Slow rendering with large datasets
++- **Solution**: Use GPU filtering, Arrow data containers, and efficient data accessors
++
++### 2. Memory Usage
++- **Problem**: High memory consumption with complex geometries
++- **Solution**: Implement data virtualization and efficient data structures
++
++### 3. State Management Complexity
++- **Problem**: Complex state updates across multiple layers and filters
++- **Solution**: Use composer functions and immutable update patterns
++
++### 4. Custom UI Integration
++- **Problem**: Difficulty integrating custom widgets
++- **Solution**: Use the dependency injection system and follow component factory patterns
++
++This documentation provides the foundation for building sophisticated visualization applications with Speckle's rich 3D geometry and attribute data, leveraging kepler.gl's proven patterns while adapting them for modern state management with Zustand.
+\ No newline at end of file
+diff --git a/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md b/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
+new file mode 100644
+index 00000000..24f92a76
+--- /dev/null
++++ b/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
+@@ -0,0 +1,347 @@
++# Urban Analytics Platform - Architectural Insights from Kepler.gl
++
++## Executive Summary
++
++This document provides architectural insights extracted from kepler.gl analysis for building the Urban Analytics Presentation Platform. The platform will transform complex simulation data (microclimate, biodiversity, accessibility) into engaging client experiences through 3D visualizations and AI-powered explanations.
++
++## Core Architecture Recommendations
++
++### 1. State Management Architecture (Zustand Migration from Redux)
++
++**Recommended Structure:**
++```typescript
++interface UrbanAnalyticsStore {
++  // Core visualization state (equivalent to kepler.gl's visState)
++  visualization: {
++    layers: Layer[];
++    filters: Filter[];
++    datasets: Record<string, Dataset>;
++    layerData: Record<string, LayerData>;
++    interactionConfig: InteractionConfig;
++    selectedObjects: string[];
++  };
++
++  // Map and viewport state
++  map: {
++    viewport: Viewport;
++    mapStyle: MapStyle;
++    bounds: Bounds;
++    annotations: Annotation[];
++  };
++
++  // UI state management with stable interface for canvas/map/visualization interactions
++  ui: {
++    scorecards: ScorecardState[];
++    sidePanel: SidePanelState;
++    modals: ModalState;
++    notifications: Notification[];
++    // Stable interface for UI components affecting visualization
++    viewState: {
++      cameraPosition: CameraPosition;
++      selectedPanels: string[];
++      layoutMode: 'comparison' | 'single' | 'overview';
++    };
++    // AI integration as part of UI state
++    ai: {
++      annotations: AIAnnotation[];
++      insights: RegionalInsight[];
++      chatHistory: ChatMessage[];
++      isGenerating: boolean;
++    };
++  };
++
++  // Speckle data integration
++  speckle: {
++    streams: SpeckleStream[];
++    currentVersions: Record<string, string>;
++    geometryObjects: GeometryObject[];
++    loadingStates: Record<string, LoadingState>;
++  };
++}
++```
++
++**Key Patterns from Kepler.gl:**
++- **Immutable Updates**: Use Immer for complex nested state updates
++- **Cross-slice Coordination**: Implement composer functions for actions affecting multiple slices
++- **Subscription-based Side Effects**: Replace Redux middleware with Zustand subscriptions
++- **Memoized Selectors**: Use shallow equality checks for expensive computations
++
++### 2. Data Container Architecture for Speckle Integration
++
++**Architecture Overview:**
++Kepler.gl uses a DataContainer abstraction that separates data storage from data access. This allows different data formats (CSV, Arrow, Parquet) to be handled uniformly. For Speckle integration, we implement a custom container that handles BIM object hierarchies and nested properties efficiently.
++
++**Core Concept:**
++- **Rows**: Each Speckle object (building, tree, etc.) is a row
++- **Columns**: Each property/KPI (temperature, area, type) is a column
++- **Nested Access**: Properties like `parameters.Area.displayValue` are flattened to columns
++- **Caching**: Frequently accessed properties are cached for performance
++
++**Recommended Implementation:**
++```typescript
++class SpeckleDataContainer implements DataContainerInterface {
++  private _speckleObjects: SpeckleObject[];
++  private _fieldMap: Map<string, string>; // field name to property path
++  private _propertyCache: LRU<string, any>; // property path cache
++  private _geometryCache: LRU<string, any>; // geometry cache
++
++  // Efficient nested property access with caching
++  valueAt(rowIndex: number, columnIndex: number): any {
++    const field = this._fields[columnIndex];
++    const propertyPath = this._fieldMap.get(field.name);
++    const cacheKey = `${rowIndex}-${propertyPath}`;
++
++    if (this._propertyCache.has(cacheKey)) {
++      return this._propertyCache.get(cacheKey);
++    }
++
++    const value = this._extractNestedProperty(
++      this._speckleObjects[rowIndex],
++      propertyPath
++    );
++    this._propertyCache.set(cacheKey, value);
++    return value;
++  }
++}
++```
++
++**Benefits:**
++- **Memory Efficiency**: LRU caching for frequently accessed properties
++- **Performance**: Direct property access without data transformation
++- **BIM-Aware**: Handles Revit parameters, IFC properties, and nested structures
++- **Version Control**: Support for switching between Speckle commits
++
++### 3. Layer System for Rich Geometry Visualization
++
++**Simplified Approach for Initial Implementation:**
++For the first version, we'll use simplified geometry data rather than full BIM/IFC models:
++- **Point/Polygon Geometries**: Speckle objects converted to GeoJSON-like structures
++- **Attribute Mapping**: KPI values mapped to visual properties (color, height, opacity)
++- **Progressive Enhancement**: Framework ready for future BIM model integration
++
++**Custom Speckle Geometry Layer:**
++```typescript
++class SpeckleBIMLayer extends BaseLayer {
++  get visualChannels(): VisualChannels {
++    return {
++      color: {
++        property: 'color',
++        field: 'colorField', // Maps to KPI like 'carbon_footprint'
++        scale: 'colorScale',
++        accessor: 'getFillColor'
++      },
++      height: {
++        property: 'height',
++        field: 'heightField', // Maps to KPI like 'energy_usage'
++        scale: 'heightScale',
++        accessor: 'getElevation'
++      },
++      // Custom channels for BIM-specific attributes
++      opacity: {
++        property: 'opacity',
++        field: 'opacityField', // Maps to 'construction_phase'
++        scale: 'opacityScale',
++        accessor: 'getOpacity'
++      }
++    };
++  }
++
++  // Version switching capability
++  switchToVersion(version: string, datasets: Datasets) {
++    const dataset = this.getDataset(datasets);
++    const versionedData = dataset.getVersionData(version);
++
++    this.updateLayerConfig({ currentVersion: version });
++    return this.updateData({...datasets, [dataset.id]: versionedData}, null);
++  }
++}
++```
++
++### 4. Interactive Scorecard System
++
++**JSON-Configurable Architecture:**
++```typescript
++interface ScorecardConfig {
++  id: string;
++  title: string;
++  datasets: string[];
++  charts: ChartConfig[];
++  filters: FilterConfig[];
++  kpis: KPIConfig[];
++  interactions: InteractionConfig[];
++}
++
++interface ChartConfig {
++  type: 'histogram' | 'lineChart' | 'bar' | 'pie';
++  dataId: string;
++  field: string;
++  aggregation: 'sum' | 'average' | 'count' | 'max' | 'min';
++  binCount?: number;
++  clickAction: 'filter' | 'highlight' | 'select';
++}
++```
++
++**Real-time KPI Computation:**
++
++**Kepler.gl Aggregation Functions:**
++Yes! Kepler.gl provides optimized aggregation functions from d3-array:
++- `sum()`, `mean()`, `max()`, `min()`, `median()` - Fast numeric aggregations
++- `mode()`, `countUnique()` - Categorical aggregations
++- GPU-accelerated for large datasets when possible
++- Efficient change detection to avoid unnecessary recalculations
++
++```typescript
++// Leveraging kepler.gl's aggregation patterns
++export const computeKPIsFromSelection = (
++  selectedObjects: string[],
++  datasets: Datasets,
++  kpiFields: string[]
++): Record<string, KPIValue> => {
++  return kpiFields.reduce((kpis, field) => {
++    const values = selectedObjects
++      .map(id => getKPIValue(datasets, id, field))
++      .filter(v => v != null);
++
++    kpis[field] = {
++      sum: aggregate(values, AGGREGATION_TYPES.sum),
++      avg: aggregate(values, AGGREGATION_TYPES.average),
++      min: aggregate(values, AGGREGATION_TYPES.minimum),
++      max: aggregate(values, AGGREGATION_TYPES.maximum),
++      count: values.length
++    };
++    return kpis;
++  }, {});
++};
++```
++
++### 5. Performance Optimization Strategy
++
++**For 3-20k Geometry Objects (Preset-Based Approach):**
++
++**Performance Presets:**
++- **Small Dataset (<1k objects)**: Standard processing, all features enabled
++- **Medium Dataset (1-5k objects)**: Selective GPU filtering, moderate caching
++- **Large Dataset (5-20k objects)**: Aggressive caching, chunked processing, simplified interactions
++- **Auto-Detection**: System automatically selects optimal preset based on object count
++1. **Data Container Selection:**
++   - Use `ArrowDataContainer` for large datasets (>5k objects)
++   - Use `IndexedDataContainer` for filtered views
++   - Implement `SpeckleDataContainer` for BIM-specific optimizations
++
++2. **GPU/CPU Processing Balance:**
++   - GPU filtering for up to 4 numeric KPIs simultaneously
++   - CPU filtering for complex categorical/string filters
++   - Automatic fallback when GPU channels exhausted
++
++3. **Memory Management (Automatic Under-the-Hood Optimizations):**
++   - **Automatic**: Shared row objects to reduce GC pressure
++   - **Automatic**: LRU caching for frequently accessed properties
++   - **Automatic**: Lazy loading of geometry data
++   - **Configurable**: Cache sizes based on available memory
++
++4. **Rendering Optimizations:**
++   - Viewport-based culling for large models
++   - Level-of-detail based on zoom level
++   - Aggregation layers for overview visualization
++
++### 6. Component Extensibility Architecture
++
++**Factory Pattern Implementation:**
++```typescript
++// Custom scorecard widget factory
++function ScoreCardWidgetFactory(
++  MetricsDisplayFactory,
++  ChartComponentFactory,
++  FilterIntegrationFactory
++) {
++  const ScoreCardWidget = ({ metrics, filters, onMetricClick }) => (
++    <WidgetContainer>
++      <MetricsDisplay metrics={metrics} onClick={onMetricClick} />
++      <ChartComponent data={metrics.chartData} />
++      <FilterIntegration filters={filters} />
++    </WidgetContainer>
++  );
++  return ScoreCardWidget;
++}
++
++// Component injection
++const UrbanKeplerGl = injectComponents([
++  [CustomPanelsFactory, UrbanAnalyticsPanelFactory],
++  [BottomWidgetFactory, UrbanBottomWidgetFactory],
++  [SidebarFactory, UrbanSidebarFactory]
++]);
++```
++
++### 7. AI Integration Architecture
++
++**User Journey for AI Integration:**
++1. **Context-Aware Annotations**: User clicks on map → AI explains what they're seeing
++2. **Insight Generation**: User selects objects → AI summarizes KPIs and relationships
++3. **Comparative Analysis**: User switches between versions → AI highlights key differences
++4. **Smart Explanations**: User hovers over KPI → AI provides contextual interpretation
++
++**Stateless Annotation System:**
++```typescript
++interface AIIntegration {
++  // Annotation chat with external API
++  generateAnnotationInsight: (
++    annotation: Annotation,
++    context: AnalysisContext
++  ) => Promise<string>;
++
++  // Regional summary insights
++  generateRegionalSummary: (
++    geometryData: GeometryObject[],
++    kpis: KPIData[]
++  ) => Promise<RegionalInsight>;
++
++  // Contextual explanations
++  explainKPIResults: (
++    kpi: string,
++    value: number,
++    context: SpatialContext
++  ) => Promise<string>;
++}
++```
++
++## Implementation Roadmap
++
++### Phase 1: Core Architecture (Weeks 1-2)
++1. Set up Zustand store with state slices
++2. Implement Speckle data container
++3. Create base layer system with visual channels
++4. Build component factory system
++
++### Phase 2: Scorecard System (Weeks 3-4)
++1. Implement JSON-configurable scorecards
++2. Build real-time KPI computation
++3. Create interactive chart components
++4. Implement chart-to-3D scene interactions
++
++### Phase 3: Performance & Polish (Weeks 5-6)
++1. Optimize data containers for large datasets
++2. Implement viewport-based optimizations
++3. Add background processing capabilities
++4. Performance testing with 3-20k objects
++
++### Phase 4: AI Integration (Weeks 7-8)
++1. Implement annotation system
++2. Integrate external AI API
++3. Build insight generation pipeline
++4. Add contextual explanations
++
++## Success Metrics
++
++- **Performance**: Smooth interaction with 3-20k geometry objects
++- **Extensibility**: Easy addition of new KPIs and visualization types
++- **User Experience**: Intuitive scorecard interactions driving 3D exploration
++- **Technical Debt**: Clean separation between UI, data, and visualization logic
++
++## Risk Mitigation
++
++1. **Performance Risk**: Implement progressive loading and chunked processing
++2. **Complexity Risk**: Start with simple scorecard types, expand gradually
++3. **Integration Risk**: Build adapter patterns for external dependencies
++4. **Scalability Risk**: Design for horizontal scaling of data processing
++
++This architectural foundation leverages kepler.gl's proven patterns while adapting them for the specific needs of urban analytics visualization with Speckle data integration.
+diff --git a/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md b/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
+new file mode 100644
+index 00000000..2d01ad90
+--- /dev/null
++++ b/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
+@@ -0,0 +1,682 @@
++# Urban Analytics Platform - Data Structure & Taxonomy Mapping
++
++## Overview
++
++This document defines the data structure and taxonomy mapping for the Urban Analytics Platform, establishing how Speckle BIM data should be organized, accessed, and visualized. The taxonomy is designed to be compatible with kepler.gl's data processing patterns while supporting rich urban analytics workflows.
++
++## Core Data Taxonomy
++
++### 1. Geometry Types Classification
++
++```typescript
++enum GeometryType {
++  // Primary Analysis Geometries (carry analysis results)
++  BUILDING = 'building',
++  TREE = 'tree',
++  ROAD = 'road',
++  URBAN_FURNITURE = 'urban_furniture',
++
++  // Reference Geometries (contextual elements)
++  POI = 'poi',
++  INFRASTRUCTURE = 'infrastructure',
++  BOUNDARY = 'boundary',
++
++  // Annotation Layers (interactive elements)
++  ANNOTATION_POINT = 'annotation_point',
++  ANNOTATION_AREA = 'annotation_area',
++
++  // Regional Summaries (aggregated data)
++  GRID_CELL = 'grid_cell',
++  DISTRICT = 'district'
++}
++```
++
++### 2. Analysis Categories
++
++```typescript
++enum AnalysisCategory {
++  // Environmental Analysis
++  MICROCLIMATE = 'microclimate',
++  SOLAR_ACCESS = 'solar_access',
++  WIND_PATTERNS = 'wind_patterns',
++  NOISE_LEVELS = 'noise_levels',
++  AIR_QUALITY = 'air_quality',
++
++  // Biodiversity Analysis
++  HABITAT_QUALITY = 'habitat_quality',
++  SPECIES_DIVERSITY = 'species_diversity',
++  ECOLOGICAL_CONNECTIVITY = 'ecological_connectivity',
++  GREEN_COVERAGE = 'green_coverage',
++
++  // Accessibility Analysis
++  WALKABILITY = 'walkability',
++  PUBLIC_TRANSPORT = 'public_transport',
++  CYCLING_ACCESS = 'cycling_access',
++  BARRIER_FREE_ACCESS = 'barrier_free_access',
++
++  // Social & Economic
++  DEMOGRAPHICS = 'demographics',
++  ECONOMIC_ACTIVITY = 'economic_activity',
++  SOCIAL_COHESION = 'social_cohesion',
++
++  // Infrastructure
++  UTILITIES = 'utilities',
++  DIGITAL_CONNECTIVITY = 'digital_connectivity',
++  EMERGENCY_ACCESS = 'emergency_access'
++}
++```
++
++### 3. Standard KPI Naming Convention
++
++```typescript
++interface KPIField {
++  category: AnalysisCategory;
++  metric: string;
++  unit?: string;
++  analysisType: 'quantitative' | 'qualitative' | 'categorical';
++  // Extended attributes for better UX and AI understanding
++  shortName?: string;                    // e.g., "Temp" for "Temperature"
++  description: string;                   // Full description for tooltips/AI
++  descriptionShort: string;              // Brief description for UI
++  defaultAggregation: AggregationMethod; // Default aggregation method
++  interpretationHighLow: {               // How to interpret high/low values
++    high: 'good' | 'bad' | 'neutral';
++    low: 'good' | 'bad' | 'neutral';
++    explanation: string;
++  };
++  aiContext?: string;                    // Additional context for LLM understanding
++}
++
++// Standard naming pattern: analysis_{category}_{metric}_{unit?}
++const KPI_NAMING_PATTERNS = {
++  // Microclimate
++  'analysis_microclimate_temperature_c': {
++    category: AnalysisCategory.MICROCLIMATE,
++    metric: 'temperature',
++    unit: 'celsius',
++    analysisType: 'quantitative'
++  },
++  'analysis_microclimate_humidity_percent': {
++    category: AnalysisCategory.MICROCLIMATE,
++    metric: 'humidity',
++    unit: 'percent',
++    analysisType: 'quantitative'
++  },
++
++  // Solar Access
++  'analysis_solar_annual_hours': {
++    category: AnalysisCategory.SOLAR_ACCESS,
++    metric: 'annual_hours',
++    unit: 'hours',
++    analysisType: 'quantitative'
++  },
++  'analysis_solar_winter_access_percent': {
++    category: AnalysisCategory.SOLAR_ACCESS,
++    metric: 'winter_access',
++    unit: 'percent',
++    analysisType: 'quantitative'
++  },
++
++  // Biodiversity
++  'analysis_biodiversity_species_count': {
++    category: AnalysisCategory.SPECIES_DIVERSITY,
++    metric: 'species_count',
++    analysisType: 'quantitative'
++  },
++  'analysis_biodiversity_habitat_quality_score': {
++    category: AnalysisCategory.HABITAT_QUALITY,
++    metric: 'quality_score',
++    analysisType: 'quantitative'
++  },
++
++  // Accessibility
++  'analysis_accessibility_walk_score': {
++    category: AnalysisCategory.WALKABILITY,
++    metric: 'walk_score',
++    analysisType: 'quantitative'
++  },
++  'analysis_accessibility_transit_minutes': {
++    category: AnalysisCategory.PUBLIC_TRANSPORT,
++    metric: 'transit_time',
++    unit: 'minutes',
++    analysisType: 'quantitative'
++  }
++};
++```
++
++## Speckle Object Structure Mapping
++
++### 1. BIM Parameter Mapping
++
++**Note**: The BIM parameter structure below provides future extensibility. For the initial implementation, we'll use a simplified Speckle data structure that you'll provide, but the framework supports full BIM parameter access when needed.
++
++```typescript
++interface SpeckleParameterStructure {
++  // Revit Parameters
++  parameters?: {
++    [parameterName: string]: {
++      displayValue: string | number;
++      units?: string;
++      type?: string;
++    }
++  };
++
++  // Properties (generic key-value pairs)
++  properties?: {
++    [key: string]: any;
++  };
++
++  // IFC Property Sets
++  psets?: {
++    [psetName: string]: {
++      [propertyName: string]: any;
++    }
++  };
++
++  // Quantity Sets
++  qsets?: {
++    [qsetName: string]: {
++      [quantityName: string]: {
++        value: number;
++        unit: string;
++      }
++    }
++  };
++}
++
++// Property path mapping for different BIM platforms
++const BIM_PROPERTY_PATHS = {
++  // Revit parameter access
++  revit: {
++    'Area': 'parameters.Area.displayValue',
++    'Volume': 'parameters.Volume.displayValue',
++    'Height': 'parameters.Height.displayValue',
++    'Material': 'parameters.Material.displayValue',
++    'Type Comments': 'parameters.Type Comments.displayValue'
++  },
++
++  // IFC property access
++  ifc: {
++    'NominalArea': 'psets.Pset_SpaceCommon.NominalArea',
++    'GrossFloorArea': 'psets.Pset_BuildingCommon.GrossFloorArea',
++    'FireRating': 'psets.Pset_WallCommon.FireRating'
++  },
++
++  // Generic properties
++  generic: {
++    'category': 'properties.category',
++    'level': 'properties.level',
++    'phase': 'properties.phase'
++  }
++};
++```
++
++### 2. Geometry Data Structure
++
++```typescript
++interface GeometryDataStructure {
++  // Basic object identification
++  id: string;
++  speckle_type: string;
++
++  // Geometry representation
++  geometry?: {
++    type: 'Mesh' | 'Brep' | 'Curve' | 'Point';
++    vertices?: number[];
++    faces?: number[];
++    bbox?: [number, number, number, number, number, number]; // [minX, minY, minZ, maxX, maxY, maxZ]
++  };
++
++  // Spatial properties (auto-calculated)
++  centroid?: [number, number, number];
++  area?: number;
++  volume?: number;
++
++  // Analysis results (our taxonomy)
++  analysis_results?: {
++    [kpiName: string]: number | string | boolean;
++  };
++
++  // BIM parameters and properties
++  parameters?: SpeckleParameterStructure['parameters'];
++  properties?: SpeckleParameterStructure['properties'];
++
++  // Hierarchical relationships
++  parent?: string; // Parent object ID
++  children?: string[]; // Child object IDs
++
++  // Version control
++  commitId: string;
++  branchName: string;
++  versionDate: Date;
++}
++```
++
++### 3. Field Detection and Mapping
++
++```typescript
++class UrbanAnalyticsFieldMapper {
++  private static readonly FIELD_TYPE_PATTERNS = {
++    // Numeric fields (for quantitative analysis)
++    numeric: [
++      /^analysis_.*_(temperature|humidity|score|count|hours|minutes|percent|area|volume)$/,
++      /^(area|volume|height|width|length)$/i,
++      /parameters\..*\.(area|volume|height)/i
++    ],
++
++    // Categorical fields (for filtering and grouping)
++    categorical: [
++      /^(type|category|level|phase|material|status)$/i,
++      /^analysis_.*_(quality|rating|class)$/,
++      /speckle_type$/
++    ],
++
++    // Temporal fields
++    temporal: [
++      /^(date|time|timestamp|created|modified)$/i,
++      /^analysis_.*_(date|time)$/
++    ],
++
++    // Spatial fields
++    spatial: [
++      /^(geometry|centroid|bbox|coordinates)$/,
++      /^(latitude|longitude|x|y|z)$/i
++    ]
++  };
++
++  static detectFieldType(fieldName: string, sampleValues: any[]): string {
++    // Check against KPI naming patterns first
++    if (KPI_NAMING_PATTERNS[fieldName]) {
++      return KPI_NAMING_PATTERNS[fieldName].analysisType;
++    }
++
++    // Pattern-based detection
++    for (const [type, patterns] of Object.entries(this.FIELD_TYPE_PATTERNS)) {
++      if (patterns.some(pattern => pattern.test(fieldName))) {
++        return type;
++      }
++    }
++
++    // Value-based analysis
++    return this.analyzeValueTypes(sampleValues);
++  }
++
++  static extractFieldsFromSpeckleObjects(objects: SpeckleObject[]): FieldDefinition[] {
++    const fieldMap = new Map<string, {
++      type: string;
++      frequency: number;
++      sampleValues: any[];
++    }>();
++
++    // Sample-based field extraction for performance
++    const sampleSize = Math.min(1000, objects.length);
++    const sample = objects.slice(0, sampleSize);
++
++    sample.forEach(obj => {
++      this.traverseObject(obj, '', (path, value) => {
++        if (!fieldMap.has(path)) {
++          fieldMap.set(path, {
++            type: 'unknown',
++            frequency: 0,
++            sampleValues: []
++          });
++        }
++
++        const field = fieldMap.get(path)!;
++        field.frequency++;
++        if (field.sampleValues.length < 100) {
++          field.sampleValues.push(value);
++        }
++      });
++    });
++
++    // Generate field definitions
++    return Array.from(fieldMap.entries()).map(([path, data]) => ({
++      name: this.pathToFieldName(path),
++      path,
++      type: this.detectFieldType(path, data.sampleValues),
++      frequency: data.frequency / sampleSize,
++      category: this.categorizeField(path)
++    }));
++  }
++
++  private static traverseObject(
++    obj: any,
++    currentPath: string,
++    callback: (path: string, value: any) => void,
++    maxDepth: number = 3
++  ): void {
++    if (maxDepth <= 0 || obj == null || typeof obj !== 'object') {
++      return;
++    }
++
++    for (const [key, value] of Object.entries(obj)) {
++      const path = currentPath ? `${currentPath}.${key}` : key;
++
++      if (value != null && typeof value !== 'object') {
++        callback(path, value);
++      } else if (typeof value === 'object' && !Array.isArray(value)) {
++        this.traverseObject(value, path, callback, maxDepth - 1);
++      }
++    }
++  }
++  private static categorizeField(path: string, configMapping?: FieldCategoryConfig): AnalysisCategory | 'metadata' | 'geometry' {
++    // Use configuration-based field categorization when available
++    if (configMapping?.fieldCategories[path]) {
++      return configMapping.fieldCategories[path];
++    }
++    // Analysis fields
++    if (path.startsWith('analysis_microclimate')) return AnalysisCategory.MICROCLIMATE;
++    if (path.startsWith('analysis_solar')) return AnalysisCategory.SOLAR_ACCESS;
++    if (path.startsWith('analysis_biodiversity')) return AnalysisCategory.SPECIES_DIVERSITY;
++    if (path.startsWith('analysis_accessibility')) return AnalysisCategory.WALKABILITY;
++
++    // Geometry fields
++    if (path.startsWith('geometry') || path.includes('centroid') || path.includes('bbox')) {
++      return 'geometry';
++    }
++
++    // Default to metadata
++    return 'metadata';
++  }
++}
++```
++
++## Configuration Management
++
++### 1. Field Category Configuration
++
++```typescript
++interface FieldCategoryConfig {
++  version: string;
++  fieldCategories: Record<string, AnalysisCategory | 'metadata' | 'geometry'>;
++  kpiDefinitions: Record<string, KPIFieldDefinition>;
++  chartCategories: Record<string, CategoryDefinition>;
++}
++
++interface CategoryDefinition {
++  name: string;
++  ranges: Array<{
++    label: string;
++    min: number;
++    max: number;
++    color?: string;
++  }>;
++}
++
++// Example configuration
++const urbanAnalyticsConfig: FieldCategoryConfig = {
++  version: "1.0",
++  fieldCategories: {
++    "analysis_microclimate_temperature_c": AnalysisCategory.MICROCLIMATE,
++    "analysis_solar_annual_hours": AnalysisCategory.SOLAR_ACCESS,
++    "building_type": "metadata",
++    "geometry.centroid": "geometry"
++  },
++  kpiDefinitions: {
++    "analysis_microclimate_temperature_c": {
++      shortName: "Temp",
++      description: "Ambient temperature measured at object location",
++      descriptionShort: "Temperature (°C)",
++      defaultAggregation: "average",
++      interpretationHighLow: {
++        high: "bad",
++        low: "good",
++        explanation: "Lower temperatures indicate better thermal comfort"
++      }
++    }
++  },
++  chartCategories: {
++    "comfort_level": {
++      name: "Comfort Level",
++      ranges: [
++        { label: "Comfortable", min: 70, max: 100, color: "#22c55e" },
++        { label: "Moderate", min: 40, max: 70, color: "#f59e0b" },
++        { label: "Uncomfortable", min: 0, max: 40, color: "#ef4444" }
++      ]
++    }
++  }
++};
++```
++
++## Scorecard Configuration Schema
++
++### 1. JSON Configuration Structure
++
++```typescript
++interface ScorecardConfiguration {
++  version: string;
++  scorecards: {
++    [scorecardId: string]: {
++      title: string;
++      description: string;
++      category: AnalysisCategory;
++      datasets: string[];
++
++      charts: {
++        [chartId: string]: {
++          type: 'histogram' | 'pie' | 'line' | 'bar' | 'scatter';
++          title: string;
++          field: string;
++          aggregation?: 'sum' | 'average' | 'count' | 'max' | 'min';
++          binCount?: number;
++          colorScheme?: string;
++          clickAction: {
++            type: 'filter' | 'highlight' | 'select';
++            field?: string;
++          };
++        }
++      };
++
++      kpis: {
++        [kpiId: string]: {
++          title: string;
++          field: string;
++          aggregation: 'sum' | 'average' | 'count' | 'max' | 'min';
++          format: string; // e.g., ".2f", ".0%", "$,.0f"
++          threshold?: {
++            warning: number;
++            critical: number;
++          };
++          trend?: {
++            enabled: boolean;
++            period: 'month' | 'quarter' | 'year';
++          };
++        }
++      };
++
++      filters: {
++        [filterId: string]: {
++          type: 'range' | 'multiSelect' | 'timeRange' | 'category';
++          field: string;
++          defaultValue?: any;
++          options?: string[];
++        }
++      };
++
++      layout: {
++        columns: number;
++        kpiPosition: 'top' | 'left' | 'right';
++        chartOrder: string[];
++      };
++    }
++  };
++}
++```
++
++### 2. Example Configuration
++
++```json
++{
++  "version": "1.0",
++  "scorecards": {
++    "microclimate_overview": {
++      "title": "Microclimate Analysis",
++      "description": "Temperature, humidity, and comfort analysis",
++      "category": "microclimate",
++      // Yes! datasets = spatial entity groups. Each dataset contains:
++      // - Rows: Individual geometric objects (building, tree, etc.)
++      // - Columns: Attributes/KPIs (temperature, area, type, etc.)
++      "datasets": ["buildings", "outdoor_spaces"],
++
++      "charts": {
++        "temperature_distribution": {
++          "type": "histogram",
++          "title": "Temperature Distribution",
++          "field": "analysis_microclimate_temperature_c",
++          "binCount": 20,
++          "colorScheme": "thermal",
++          "clickAction": {
++            // Non-interactive for initial implementation
++            "type": "none",
++            "field": "analysis_microclimate_temperature_c"
++          }
++        },
++        "comfort_by_type": {
++          "type": "pie",
++          "title": "Comfort by Building Type",
++          "field": "building_type", // Categorical field for pie charts
++          "aggregation": "count",
++          // For numeric data in pie charts, define categories:
++          "categories": {
++            "Comfortable": {"field": "comfort_score", "range": [70, 100]},
++            "Moderate": {"field": "comfort_score", "range": [40, 70]},
++            "Uncomfortable": {"field": "comfort_score", "range": [0, 40]}
++          },
++          "clickAction": {
++            "type": "highlight"
++          }
++        }
++      },
++
++      "kpis": {
++        "avg_temperature": {
++          "title": "Average Temperature",
++          "field": "analysis_microclimate_temperature_c",
++          "aggregation": "average",
++          "format": ".1f°C",
++          "threshold": {
++            "warning": 28,
++            "critical": 35
++          }
++        },
++        "comfort_zones": {
++          "title": "Comfort Zones",
++          "field": "analysis_microclimate_comfort_score",
++          "aggregation": "count",
++          "format": ".0f zones"
++        }
++      },
++
++      "filters": {
++        // Only these filters are active for this scorecard, others are disabled
++        "building_type": {
++          "type": "multiSelect", // Determines filter UI component and function
++          "field": "building_type",
++          "options": ["Residential", "Commercial", "Mixed Use"]
++        },
++        "temperature_range": {
++          "type": "range",
++          "field": "analysis_microclimate_temperature_c",
++          "defaultValue": [20, 30]
++        }
++      },
++
++      "layout": {
++        "columns": 2,
++        "kpiPosition": "top",
++        "chartOrder": ["temperature_distribution", "comfort_by_type"]
++      }
++    }
++  }
++}
++```
++
++## Data Processing Pipeline
++
++### 1. Speckle to Kepler.gl Transformation
++
++```typescript
++interface DataProcessingPipeline {
++  // Step 1: Extract and normalize Speckle data
++  extractSpeckleData(commitUrl: string): Promise<SpeckleObject[]>;
++
++  // Step 2: Apply field mapping and taxonomy
++  mapFieldsToTaxonomy(objects: SpeckleObject[]): FieldDefinition[];
++
++  // Step 3: Create optimized data container
++  createDataContainer(
++    objects: SpeckleObject[],
++    fields: FieldDefinition[]
++  ): SpeckleDataContainer;
++
++  // Step 4: Generate layers based on geometry types
++  createLayers(
++    dataContainer: SpeckleDataContainer,
++    fields: FieldDefinition[]
++  ): Layer[];
++
++  // Step 5: Configure default filters based on analysis categories
++  createDefaultFilters(fields: FieldDefinition[]): Filter[];
++}
++
++class UrbanAnalyticsDataProcessor implements DataProcessingPipeline {
++  async extractSpeckleData(commitUrl: string): Promise<SpeckleObject[]> {
++    const speckleClient = new SpeckleApi();
++    const commitData = await speckleClient.getCommit(commitUrl);
++    return await speckleClient.getObjects(commitData.referencedObject);
++  }
++
++  mapFieldsToTaxonomy(objects: SpeckleObject[]): FieldDefinition[] {
++    const detectedFields = UrbanAnalyticsFieldMapper.extractFieldsFromSpeckleObjects(objects);
++
++    // Enhance with taxonomy information
++    return detectedFields.map(field => ({
++      ...field,
++      category: UrbanAnalyticsFieldMapper.categorizeField(field.path),
++      isKPI: field.name.startsWith('analysis_'),
++      visualChannelCompatible: this.checkVisualChannelCompatibility(field)
++    }));
++  }
++
++  createDataContainer(
++    objects: SpeckleObject[],
++    fields: FieldDefinition[]
++  ): SpeckleDataContainer {
++    return new SpeckleDataContainer({
++      objects,
++      fields,
++      commitInfo: { /* commit metadata */ }
++    });
++  }
++
++  createLayers(
++    dataContainer: SpeckleDataContainer,
++    fields: FieldDefinition[]
++  ): Layer[] {
++    const layers = [];
++
++    // Group objects by geometry type
++    const geometryGroups = this.groupByGeometryType(dataContainer);
++
++    Object.entries(geometryGroups).forEach(([geometryType, indices]) => {
++      const layer = new SpeckleBIMLayer({
++        id: `${geometryType}_layer`,
++        type: 'speckle-bim',
++        config: {
++          dataId: dataContainer.id,
++          geometryType,
++          visConfig: this.getDefaultVisConfig(geometryType),
++          columns: this.getColumnMapping(fields, geometryType)
++        }
++      });
++
++      layers.push(layer);
++    });
++
++    return layers;
++  }
++}
++```
++
++This data taxonomy provides a comprehensive framework for organizing and processing urban analytics data, ensuring consistency across different BIM platforms while enabling rich visualization and analysis capabilities.
+diff --git a/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md b/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
+new file mode 100644
+index 00000000..9f6ced20
+--- /dev/null
++++ b/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
+@@ -0,0 +1,825 @@
++# Urban Analytics Platform - Implementation Patterns
++
++## Overview
++
++This document provides concrete implementation patterns and code snippets extracted from kepler.gl analysis, specifically adapted for building the Urban Analytics Presentation Platform. These patterns are production-ready and based on kepler.gl's proven architecture.
++
++## 1. Zustand State Management Patterns
++
++### Core Store Structure
++
++```typescript
++import { create } from 'zustand';
++import { subscribeWithSelector } from 'zustand/middleware';
++import { immer } from 'zustand/middleware/immer';
++
++interface UrbanAnalyticsStore {
++  // Visualization state
++  visualization: {
++    layers: Layer[];
++    filters: Filter[];
++    datasets: Record<string, Dataset>;
++    layerData: Record<string, LayerData>;
++    selectedObjects: string[];
++    interactionConfig: InteractionConfig;
++  };
++
++  // Map state
++  map: {
++    viewport: Viewport;
++    mapStyle: MapStyle;
++    bounds: Bounds;
++    annotations: Annotation[];
++  };
++
++  // UI state with stable interface for visualization interactions
++  ui: {
++    scorecards: ScorecardState[];
++    activePanels: string[];
++    modals: ModalState;
++    // Stable interface for UI components affecting visualization
++    viewState: {
++      cameraPosition: CameraPosition;
++      selectedPanels: string[];
++      layoutMode: 'comparison' | 'single' | 'overview';
++    };
++    // AI integration as part of UI state
++    ai: {
++      annotations: AIAnnotation[];
++      insights: RegionalInsight[];
++      chatHistory: ChatMessage[];
++      isGenerating: boolean;
++    };
++  };
++
++  // Speckle integration
++  speckle: {
++    streams: SpeckleStream[];
++    currentVersions: Record<string, string>;
++    loadingStates: Record<string, LoadingState>;
++  };
++
++  // Actions
++  actions: {
++    visualization: VisualizationActions;
++    map: MapActions;
++    ui: UIActions;
++    speckle: SpeckleActions;
++  };
++}
++
++const useUrbanAnalyticsStore = create<UrbanAnalyticsStore>()(
++  subscribeWithSelector(
++    immer((set, get) => ({
++      // Initial state
++      visualization: {
++        layers: [],
++        filters: [],
++        datasets: {},
++        layerData: {},
++        selectedObjects: [],
++        interactionConfig: DEFAULT_INTERACTION_CONFIG
++      },
++
++      map: {
++        viewport: DEFAULT_VIEWPORT,
++        mapStyle: DEFAULT_MAP_STYLE,
++        bounds: null,
++        annotations: []
++      },
++
++      ui: {
++        scorecards: [],
++        activePanels: ['overview'],
++        modals: { isOpen: false, type: null }
++      },
++
++      speckle: {
++        streams: [],
++        currentVersions: {},
++        loadingStates: {}
++      },
++
++      // Actions implementation
++      actions: {
++        visualization: {
++          updateLayer: (layerId: string, updates: Partial<Layer>) =>
++            set((state) => {
++              const layer = state.visualization.layers.find(l => l.id === layerId);
++              if (layer) {
++                Object.assign(layer, updates);
++              }
++            }),
++
++          addFilter: (filter: Filter) =>
++            set((state) => {
++              state.visualization.filters.push(filter);
++            }),
++
++          updateFilter: (filterId: string, updates: Partial<Filter>) =>
++            set((state) => {
++              const filter = state.visualization.filters.find(f => f.id === filterId);
++              if (filter) {
++                Object.assign(filter, updates);
++                // Trigger layer data recalculation
++                state.visualization.layerData = recalculateLayerData(
++                  state.visualization.layers,
++                  state.visualization.filters
++                );
++              }
++            }),
++
++          setSelectedObjects: (objectIds: string[]) =>
++            set((state) => {
++              state.visualization.selectedObjects = objectIds;
++            })
++        },
++
++        speckle: {
++          addSpeckleStream: async (streamUrl: string) => {
++            const { speckle } = get();
++
++            set((state) => {
++              state.speckle.loadingStates[streamUrl] = 'loading';
++            });
++
++            try {
++              const speckleData = await fetchSpeckleStream(streamUrl);
++              const datasets = processSpeckleToDatasets(speckleData);
++
++              set((state) => {
++                state.speckle.streams.push(speckleData);
++                state.speckle.currentVersions[speckleData.id] = speckleData.commitId;
++                state.speckle.loadingStates[streamUrl] = 'success';
++
++                // Update visualization state
++                Object.assign(state.visualization.datasets, datasets);
++                state.visualization.layers.push(...createDefaultLayers(datasets));
++              });
++            } catch (error) {
++              set((state) => {
++                state.speckle.loadingStates[streamUrl] = 'error';
++              });
++            }
++          }
++        }
++      }
++    }))
++  )
++);
++```
++
++### Cross-slice Coordination Pattern
++
++```typescript
++// Subscription-based side effects
++useUrbanAnalyticsStore.subscribe(
++  (state) => state.visualization.filters,
++  (filters, prevFilters) => {
++    if (filters !== prevFilters) {
++      // Recalculate KPIs when filters change
++      const { visualization, ui } = useUrbanAnalyticsStore.getState();
++      const updatedKPIs = computeKPIsFromFilters(
++        visualization.datasets,
++        filters,
++        ui.scorecards
++      );
++
++      useUrbanAnalyticsStore.setState((state) => ({
++        ...state,
++        ui: {
++          ...state.ui,
++          scorecards: state.ui.scorecards.map(scorecard => ({
++            ...scorecard,
++            kpis: updatedKPIs[scorecard.id] || scorecard.kpis
++          }))
++        }
++      }));
++    }
++  },
++  { equalityFn: shallow }
++);
++```
++
++## 2. Speckle Data Container Implementation
++
++```typescript
++import { LRUCache } from 'lru-cache';
++
++interface SpeckleObject {
++  id: string;
++  speckle_type: string;
++  parameters?: Record<string, any>;
++  properties?: Record<string, any>;
++  geometry?: any;
++  [key: string]: any;
++}
++
++interface SpeckleField {
++  name: string;
++  path: string;
++  type: string;
++  frequency: number;
++}
++
++class SpeckleDataContainer implements DataContainerInterface {
++  private _speckleObjects: SpeckleObject[];
++  private _fields: SpeckleField[];
++  private _fieldMap: Map<string, string>;
++  private _propertyCache: LRUCache<string, any>;
++  private _geometryCache: LRUCache<string, any>;
++
++  constructor(config: {
++    objects: SpeckleObject[];
++    fields: SpeckleField[];
++    commitInfo: CommitInfo;
++  }) {
++    this._speckleObjects = config.objects;
++    this._fields = config.fields;
++    this._fieldMap = new Map(config.fields.map(f => [f.name, f.path]));
++    this._propertyCache = new LRUCache({ max: 10000 });
++    this._geometryCache = new LRUCache({ max: 1000 });
++  }
++
++  numRows(): number {
++    return this._speckleObjects.length;
++  }
++
++  numColumns(): number {
++    return this._fields.length;
++  }
++
++  valueAt(rowIndex: number, columnIndex: number): any {
++    const field = this._fields[columnIndex];
++    const propertyPath = this._fieldMap.get(field.name);
++    const cacheKey = `${rowIndex}-${propertyPath}`;
++
++    if (this._propertyCache.has(cacheKey)) {
++      return this._propertyCache.get(cacheKey);
++    }
++
++    const value = this._extractNestedProperty(
++      this._speckleObjects[rowIndex],
++      propertyPath
++    );
++    this._propertyCache.set(cacheKey, value);
++    return value;
++  }
++
++  private _extractNestedProperty(obj: any, path: string): any {
++    const segments = path.split('.');
++    let current = obj;
++
++    for (const segment of segments) {
++      if (current == null) return null;
++
++      // Handle Speckle parameter access: parameters.{paramName}
++      if (segment.startsWith('{') && segment.endsWith('}')) {
++        const paramName = segment.slice(1, -1);
++        current = current.parameters?.[paramName]?.displayValue ??
++                 current.parameters?.[paramName];
++      }
++      // Handle array indices
++      else if (segment.includes('[') && segment.includes(']')) {
++        const [prop, indexStr] = segment.split('[');
++        const index = parseInt(indexStr.replace(']', ''));
++        current = current[prop]?.[index];
++      }
++      // Standard property access
++      else {
++        current = current[segment];
++      }
++    }
++
++    return current;
++  }
++
++  // Version switching capability
++  switchToVersion(newObjects: SpeckleObject[]): SpeckleDataContainer {
++    return new SpeckleDataContainer({
++      objects: newObjects,
++      fields: this._fields, // Reuse field schema
++      commitInfo: { /* new commit info */ }
++    });
++  }
++
++  // KPI computation for selected objects
++  computeKPIs(objectIds: string[], kpiFields: string[]): Record<string, KPIValue> {
++    const selectedIndices = objectIds.map(id =>
++      this._speckleObjects.findIndex(obj => obj.id === id)
++    ).filter(idx => idx !== -1);
++
++    return kpiFields.reduce((kpis, field) => {
++      const fieldIndex = this._fields.findIndex(f => f.name === field);
++      if (fieldIndex === -1) return kpis;
++
++      const values = selectedIndices
++        .map(idx => this.valueAt(idx, fieldIndex))
++        .filter(v => v != null && typeof v === 'number');
++
++      kpis[field] = {
++        sum: values.reduce((a, b) => a + b, 0),
++        avg: values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0,
++        min: values.length ? Math.min(...values) : 0,
++        max: values.length ? Math.max(...values) : 0,
++        count: values.length
++      };
++
++      return kpis;
++    }, {});
++  }
++}
++```
++
++## 3. Simplified Geometry Layer Implementation
++
++**Note**: This implementation uses simplified geometry data rather than full BIM models for the initial version:
++
++```typescript
++import { GeoJsonLayer } from '@deck.gl/layers';
++import { BaseLayer } from 'kepler.gl/src/layers';
++
++// Simplified Speckle Geometry Layer (not full BIM)
++class SpeckleGeometryLayer extends BaseLayer {
++  constructor(props) {
++    super(props);
++    this.registerVisConfig(speckleBIMVisConfigs);
++  }
++
++  get type(): 'speckle-geometry' {
++    return 'speckle-geometry';
++  }
++
++  get visualChannels(): VisualChannels {
++    return {
++      color: {
++        property: 'color',
++        field: 'colorField',
++        scale: 'colorScale',
++        domain: 'colorDomain',
++        range: 'colorRange',
++        channelScaleType: CHANNEL_SCALES.color,
++        accessor: 'getFillColor',
++        nullValue: NO_VALUE_COLOR
++      },
++      height: {
++        property: 'height',
++        field: 'heightField',
++        scale: 'heightScale',
++        domain: 'heightDomain',
++        range: 'heightRange',
++        channelScaleType: CHANNEL_SCALES.size,
++        accessor: 'getElevation',
++        nullValue: 0
++      },
++      strokeColor: {
++        property: 'strokeColor',
++        field: 'strokeColorField',
++        scale: 'strokeColorScale',
++        domain: 'strokeColorDomain',
++        range: 'strokeColorRange',
++        channelScaleType: CHANNEL_SCALES.color,
++        accessor: 'getLineColor'
++      }
++    };
++  }
++
++  calculateDataAttribute(keplerTable: KeplerTable, getPosition) {
++    const { dataContainer } = keplerTable;
++    const data = [];
++
++    for (let i = 0; i < dataContainer.numRows(); i++) {
++      const speckleObject = dataContainer.row(i);
++      const position = getPosition(speckleObject);
++
++      if (position.every(Number.isFinite)) {
++        data.push({
++          position,
++          index: i,
++          speckleId: speckleObject.id,
++          speckleType: speckleObject.speckle_type,
++          properties: this.extractProperties(speckleObject)
++        });
++      }
++    }
++
++    return data;
++  }
++
++  renderLayer(opts) {
++    const { data, mapState } = opts;
++    const accessors = this.getAttributeAccessors({
++      dataContainer: data.dataContainer
++    });
++
++    return [
++      new GeoJsonLayer({
++        ...this.getDefaultDeckLayerProps(opts),
++        data: data.data,
++
++        // 3D visualization
++        extruded: this.config.visConfig.enable3d,
++        getElevation: accessors.getElevation,
++
++        // Visual encoding
++        getFillColor: accessors.getFillColor,
++        getLineColor: accessors.getLineColor,
++        getLineWidth: d => this.config.visConfig.thickness,
++
++        // Interactions
++        onHover: this.handleObjectHover.bind(this),
++        onClick: this.handleObjectClick.bind(this),
++
++        updateTriggers: {
++          getFillColor: this.config.colorTrigger,
++          getElevation: this.config.heightTrigger,
++          getLineColor: this.config.strokeColorTrigger
++        }
++      })
++    ];
++  }
++
++  handleObjectClick(info) {
++    if (info.object) {
++      // Update store with selected object
++      useUrbanAnalyticsStore.getState().actions.visualization.setSelectedObjects([
++        info.object.speckleId
++      ]);
++
++      return {
++        type: 'speckle-object',
++        object: info.object,
++        tooltip: this.formatTooltip(info.object)
++      };
++    }
++  }
++
++  formatTooltip(speckleObject): string {
++    const properties = speckleObject.properties || {};
++    return `
++      <div class="speckle-tooltip">
++        <h4>${speckleObject.speckleType}</h4>
++        <div>ID: ${speckleObject.speckleId}</div>
++        ${Object.entries(properties).map(([key, value]) =>
++          `<div>${key}: ${value}</div>`
++        ).join('')}
++      </div>
++    `;
++  }
++}
++```
++
++## 4. Interactive Scorecard System
++
++```typescript
++interface ScorecardConfig {
++  id: string;
++  title: string;
++  datasets: string[];
++  charts: ChartConfig[];
++  kpis: KPIConfig[];
++  filters: FilterConfig[];
++  interactions: InteractionConfig[];
++}
++
++interface ChartConfig {
++  type: 'histogram' | 'lineChart' | 'bar' | 'pie';
++  field: string;
++  aggregation: string;
++  binCount?: number;
++  clickAction: 'filter' | 'highlight' | 'select';
++}
++
++interface KPIConfig {
++  id: string;
++  title: string;
++  field: string;
++  aggregation: string;
++  format: string;
++  threshold?: {
++    warning: number;
++    critical: number;
++  };
++}
++
++// Scorecard React Component
++const ScorecardWidget: React.FC<{
++  config: ScorecardConfig;
++  onChartClick: (chartId: string, value: any) => void;
++}> = ({ config, onChartClick }) => {
++  const datasets = useUrbanAnalyticsStore(state => state.visualization.datasets);
++  const filters = useUrbanAnalyticsStore(state => state.visualization.filters);
++
++  // Real-time KPI computation
++  const kpis = useMemo(() => {
++    return computeKPIsFromConfig(datasets, filters, config.kpis);
++  }, [datasets, filters, config.kpis]);
++
++  const chartData = useMemo(() => {
++    return generateChartsFromConfig(datasets, filters, config.charts);
++  }, [datasets, filters, config.charts]);
++
++  return (
++    <ScorecardContainer>
++      <ScorecardHeader>
++        <Title>{config.title}</Title>
++      </ScorecardHeader>
++
++      <KPIGrid>
++        {kpis.map(kpi => (
++          <KPICard key={kpi.id} kpi={kpi} />
++        ))}
++      </KPIGrid>
++
++      <ChartsGrid>
++        {chartData.map(chart => (
++          <ChartComponent
++            key={chart.id}
++            chart={chart}
++            onClick={(value) => onChartClick(chart.id, value)}
++          />
++        ))}
++      </ChartsGrid>
++    </ScorecardContainer>
++  );
++};
++
++// Pre-made Fast Aggregation Functions from Kepler.gl
++import {
++  sum, mean, max, min, median,
++  mode, countUnique
++} from 'd3-array';
++
++const AGGREGATION_FUNCTIONS = {
++  sum: (values: number[]) => sum(values),
++  average: (values: number[]) => mean(values),
++  max: (values: number[]) => max(values),
++  min: (values: number[]) => min(values),
++  median: (values: number[]) => median(values),
++  count: (values: any[]) => values.length,
++  countUnique: (values: any[]) => countUnique(values),
++  mode: (values: any[]) => mode(values)
++};
++
++// KPI computation utility
++const computeKPIsFromConfig = (
++  datasets: Record<string, Dataset>,
++  filters: Filter[],
++  kpiConfigs: KPIConfig[]
++): KPIValue[] => {
++  return kpiConfigs.map(config => {
++    const relevantDatasets = config.datasets || Object.keys(datasets);
++    let aggregatedValue = 0;
++    let count = 0;
++
++    relevantDatasets.forEach(datasetId => {
++      const dataset = datasets[datasetId];
++      if (!dataset) return;
++
++      const filteredData = applyFiltersToDataset(dataset, filters);
++      const fieldValues = extractFieldValues(filteredData, config.field);
++
++      // Use optimized aggregation functions
++      const aggregationFn = AGGREGATION_FUNCTIONS[config.aggregation];
++      if (aggregationFn) {
++        const result = aggregationFn(fieldValues);
++        if (config.aggregation === 'average') {
++          aggregatedValue += result * fieldValues.length;
++          count += fieldValues.length;
++        } else if (['sum', 'count'].includes(config.aggregation)) {
++          aggregatedValue += result;
++        } else {
++          aggregatedValue = count === 0 ? result :
++                           (config.aggregation === 'max' ?
++                            Math.max(aggregatedValue, result) :
++                            Math.min(aggregatedValue, result));
++        }
++      }
++    });
++
++    if (config.aggregation === 'average' && count > 0) {
++      aggregatedValue = aggregatedValue / count;
++    }
++
++    return {
++      id: config.id,
++      title: config.title,
++      value: aggregatedValue,
++      format: config.format,
++      threshold: config.threshold,
++      status: getKPIStatus(aggregatedValue, config.threshold)
++    };
++  });
++};
++```
++
++## 5. Component Factory Pattern
++
++```typescript
++// Custom component factory for urban analytics
++function UrbanAnalyticsPanelFactory() {
++  const panels = [
++    {
++      id: 'overview',
++      label: 'City Overview',
++      iconComponent: Icons.Dashboard,
++      component: OverviewPanelFactory
++    },
++    {
++      id: 'scorecard',
++      label: 'Score Cards',
++      iconComponent: Icons.BarChart,
++      component: ScorecardPanelFactory
++    },
++    {
++      id: 'annotations',
++      label: 'Annotations',
++      iconComponent: Icons.Pin,
++      component: AnnotationPanelFactory
++    }
++  ];
++
++  const getProps = (sidePanelProps) => ({
++    selectedObjects: sidePanelProps.selectedObjects,
++    timeRange: sidePanelProps.timeRange,
++    comparisonMode: sidePanelProps.comparisonMode
++  });
++
++  return { panels, getProps };
++}
++
++// Component injection setup
++const UrbanKeplerGl = injectComponents([
++  [CustomPanelsFactory, UrbanAnalyticsPanelFactory],
++  [SidebarFactory, UrbanSidebarFactory],
++  [BottomWidgetFactory, UrbanBottomWidgetFactory]
++]);
++```
++
++## 6. Performance Optimization Patterns
++
++```typescript
++// Efficient data processing for large datasets
++class PerformanceOptimizedProcessor {
++  private static readonly CHUNK_SIZE = 1000;
++  private static readonly MAX_SAMPLE_SIZE = 5000;
++
++  static processLargeDataset(
++    speckleObjects: SpeckleObject[],
++    processingFunction: (chunk: SpeckleObject[]) => any
++  ): any[] {
++    const results = [];
++
++    for (let i = 0; i < speckleObjects.length; i += this.CHUNK_SIZE) {
++      const chunk = speckleObjects.slice(i, i + this.CHUNK_SIZE);
++      results.push(processingFunction(chunk));
++    }
++
++    return results.flat();
++  }
++
++  static sampleDataForAnalysis(
++    speckleObjects: SpeckleObject[],
++    sampleSize: number = this.MAX_SAMPLE_SIZE
++  ): SpeckleObject[] {
++    if (speckleObjects.length <= sampleSize) {
++      return speckleObjects;
++    }
++
++    const step = Math.floor(speckleObjects.length / sampleSize);
++    return speckleObjects.filter((_, index) => index % step === 0);
++  }
++
++  static createFilteredIndex(
++    dataContainer: SpeckleDataContainer,
++    filters: Filter[]
++  ): Uint8ClampedArray {
++    const filteredIndex = new Uint8ClampedArray(dataContainer.numRows());
++
++    for (let i = 0; i < dataContainer.numRows(); i++) {
++      filteredIndex[i] = filters.every(filter =>
++        this.evaluateFilter(dataContainer, i, filter)
++      ) ? 1 : 0;
++    }
++
++    return filteredIndex;
++  }
++}
++
++// Memoized selectors for expensive computations
++const useOptimizedSelectors = () => {
++  const layers = useUrbanAnalyticsStore(
++    useCallback((state) => state.visualization.layers, []),
++    shallow
++  );
++
++  const filteredLayers = useUrbanAnalyticsStore(
++    useCallback((state) => {
++      const { layers, filters } = state.visualization;
++      return layers.filter(layer =>
++        filters.every(filter => evaluateLayerAgainstFilter(layer, filter))
++      );
++    }, []),
++    shallow
++  );
++
++  const selectedObjectKPIs = useUrbanAnalyticsStore(
++    useCallback((state) => {
++      const { selectedObjects, datasets } = state.visualization;
++      return computeKPIsForSelection(selectedObjects, datasets);
++    }, []),
++    shallow
++  );
++
++  return { layers, filteredLayers, selectedObjectKPIs };
++};
++```
++
++## 7. AI Integration Patterns
++
++```typescript
++interface AIService {
++  generateAnnotationInsight(
++    annotation: Annotation,
++    context: AnalysisContext
++  ): Promise<string>;
++
++  generateRegionalSummary(
++    geometryData: GeometryObject[],
++    kpis: KPIData[]
++  ): Promise<RegionalInsight>;
++}
++
++class UrbanAnalyticsAIService implements AIService {
++  private apiUrl: string;
++  private apiKey: string;
++
++  constructor(config: { apiUrl: string; apiKey: string }) {
++    this.apiUrl = config.apiUrl;
++    this.apiKey = config.apiKey;
++  }
++
++  async generateAnnotationInsight(
++    annotation: Annotation,
++    context: AnalysisContext
++  ): Promise<string> {
++    const payload = {
++      annotation: {
++        type: annotation.type,
++        position: annotation.position,
++        content: annotation.content
++      },
++      context: {
++        selectedObjects: context.selectedObjects,
++        kpis: context.kpis,
++        timeRange: context.timeRange
++      }
++    };
++
++    const response = await fetch(`${this.apiUrl}/annotations/insights`, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'Authorization': `Bearer ${this.apiKey}`
++      },
++      body: JSON.stringify(payload)
++    });
++
++    const result = await response.json();
++    return result.insight;
++  }
++
++  async generateRegionalSummary(
++    geometryData: GeometryObject[],
++    kpis: KPIData[]
++  ): Promise<RegionalInsight> {
++    const aggregatedData = this.aggregateRegionalData(geometryData, kpis);
++
++    const response = await fetch(`${this.apiUrl}/regional/summary`, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'Authorization': `Bearer ${this.apiKey}`
++      },
++      body: JSON.stringify({ data: aggregatedData })
++    });
++
++    return await response.json();
++  }
++
++  private aggregateRegionalData(
++    geometryData: GeometryObject[],
++    kpis: KPIData[]
++  ): RegionalAggregation {
++    // Implement spatial aggregation logic
++    return {
++      totalObjects: geometryData.length,
++      avgKPIs: this.computeAverageKPIs(kpis),
++      spatialDistribution: this.computeSpatialDistribution(geometryData),
++      trends: this.identifyTrends(kpis)
++    };
++  }
++}
++```
++
++These implementation patterns provide a solid foundation for building the Urban Analytics Platform, leveraging kepler.gl's proven architecture while adapting it for BIM/Speckle data integration, real-time scorecard interactions, and AI-powered insights.
+-- 
+2.49.0
+
+
+From d99760b2ea2bd177f345663b4f7f1a185890678d Mon Sep 17 00:00:00 2001
+From: SerjoschDuering <tralala798@gmail.com>
+Date: Thu, 17 Jul 2025 10:13:19 +0200
+Subject: [PATCH 2/3] docs: enhance Urban Analytics Platform documentation with
+ user flows and refined data taxonomy
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Add comprehensive system architecture overview with data flow pipeline
+- Unify KPI definitions into single comprehensive registry structure
+- Extend aggregation types with withinBounds and percentile support
+- Clarify scorecard filters as preset configurations, not user controls
+- Add flexible threshold system supporting absolute, relative, and divergence types
+- Create detailed user flows document with Wind Comfort and Overview mode scenarios
+- Update data processing pipeline to use deck.gl instead of kepler.gl
+- Add KPI-based approach for pie chart categories for better reusability
+- Include technical implementation notes for each user flow
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+---
+ docs/URBAN_ANALYTICS_DATA_TAXONOMY.md | 186 +++++++++++++++++++++++---
+ docs/URBAN_ANALYTICS_USER_FLOWS.md    | 180 +++++++++++++++++++++++++
+ 2 files changed, 344 insertions(+), 22 deletions(-)
+ create mode 100644 docs/URBAN_ANALYTICS_USER_FLOWS.md
+
+diff --git a/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md b/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
+index 2d01ad90..8adfdfa6 100644
+--- a/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
++++ b/docs/URBAN_ANALYTICS_DATA_TAXONOMY.md
+@@ -4,10 +4,63 @@
+ 
+ This document defines the data structure and taxonomy mapping for the Urban Analytics Platform, establishing how Speckle BIM data should be organized, accessed, and visualized. The taxonomy is designed to be compatible with kepler.gl's data processing patterns while supporting rich urban analytics workflows.
+ 
++### **System Architecture Overview**
++
++The Urban Analytics Platform processes data through the following pipeline:
++
++**Speckle Data → Geometry Grouping → Analysis Attribution → Scorecard Visualization → User Interaction**
++
++1. **Speckle Objects**: List of geometry objects with attributes from different design variants
++2. **Geometry Grouping**: Objects grouped by `geometry_type` attribute (buildings, trees, roads, etc.)
++3. **Analysis Attribution**: Each geometry carries analysis results as attributes following naming conventions
++4. **Scorecard System**: JSON-configured cards display KPIs and charts for specific analysis categories
++5. **User Interaction**: Click, hover, and chat interactions provide contextual insights
++
++### **Object Types and Relationships**
++
++The platform handles several core object types:
++
++**🏢 Spatial Entities (Datasets)**
++- **Buildings Dataset**: Individual buildings with microclimate, energy, accessibility KPIs
++- **Trees Dataset**: Individual trees with biodiversity, shading, air quality KPIs  
++- **Roads Dataset**: Road segments with mobility, noise, accessibility KPIs
++- **Grid Cells Dataset**: Analysis grid with aggregated environmental KPIs
++
++**📊 Analysis Objects**
++- **KPI Definitions**: Reusable metric definitions with aggregation methods and thresholds
++- **Scorecard Configurations**: JSON templates defining chart layouts and filtering presets
++- **Chart Categories**: Predefined ranges for converting numeric KPIs to categorical displays
++
++**🎯 Interaction Objects**
++- **AI Annotations**: Contextual explanations anchored to specific locations
++- **Filter Presets**: Scorecard-specific display configurations
++- **Visual States**: Layer visibility and styling configurations
++
++### **Data Flow Example (Wind Comfort Scorecard)**
++
++1. **Speckle Input**: 2,000 grid cell objects with `analysis_wind_comfort_category` attributes
++2. **Geometry Grouping**: Objects grouped by `geometry_type: "grid_cell"`
++3. **KPI Computation**: 
++   - `avg_windspeed`: Average of all grid cell wind speeds
++   - `comfort_zones`: Count of cells in each Lawson category
++4. **Chart Generation**:
++   - **Pie Chart**: 5 slices for Lawson categories (Comfortable, Moderate, etc.)
++   - **Histogram**: Wind speed distribution (static, non-interactive)
++5. **Canvas Visualization**: Grid cells colored by comfort category
++6. **User Interaction**: Click pie slice → filter grid cells → show only selected category
++
++This approach ensures **one analysis result type per geometry type** while maintaining flexibility for multiple KPI perspectives on the same data.
++
+ ## Core Data Taxonomy
+ 
+ ### 1. Geometry Types Classification
+ 
++**Speckle Data Grouping Strategy:**
++Speckle provides a list of geometry objects with attributes. One attribute (likely `geometry_type` or `speckle_type`) defines the GeometryType for efficient grouping. This approach means we can show **one analysis result type per geometry type at a time**, which actually simplifies the UI and reduces cognitive load.
++
++**Attribute Naming Scheme:**
++Geometry attributes follow consistent naming conventions (e.g., `analysis_wind_comfort_category`, `analysis_microclimate_temperature_c`) enabling automated field detection and efficient data structure construction.
++
+ ```typescript
+ enum GeometryType {
+   // Primary Analysis Geometries (carry analysis results)
+@@ -68,33 +121,75 @@ enum AnalysisCategory {
+ 
+ ### 3. Standard KPI Naming Convention
+ 
++**Unified KPI Definition:**
++You're absolutely right! `KPIField` and `KPI_NAMING_PATTERNS` should be unified into a single comprehensive definition:
++
+ ```typescript
+-interface KPIField {
++interface KPIDefinition {
++  // Core identification
++  id: string;                            // e.g., "analysis_wind_comfort_avg"
+   category: AnalysisCategory;
+   metric: string;
+   unit?: string;
+   analysisType: 'quantitative' | 'qualitative' | 'categorical';
+-  // Extended attributes for better UX and AI understanding
+-  shortName?: string;                    // e.g., "Temp" for "Temperature"
++  
++  // Display attributes
++  shortName: string;                     // e.g., "Wind Speed"
+   description: string;                   // Full description for tooltips/AI
+   descriptionShort: string;              // Brief description for UI
++  
++  // Computation attributes
+   defaultAggregation: AggregationMethod; // Default aggregation method
+-  interpretationHighLow: {               // How to interpret high/low values
++  availableAggregations: AggregationMethod[]; // Allowed aggregation types
++  
++  // Value interpretation
++  interpretationHighLow: {
+     high: 'good' | 'bad' | 'neutral';
+     low: 'good' | 'bad' | 'neutral';
+     explanation: string;
+   };
++  
++  // Threshold and categorization
++  thresholds?: {
++    warning: number;
++    critical: number;
++  };
++  categories?: Array<{
++    label: string;
++    min: number;
++    max: number;
++    color: string;
++  }>;
++  
++  // AI integration
+   aiContext?: string;                    // Additional context for LLM understanding
+ }
+ 
+-// Standard naming pattern: analysis_{category}_{metric}_{unit?}
+-const KPI_NAMING_PATTERNS = {
++// Unified KPI Registry (replaces separate naming patterns)
++const KPI_REGISTRY: Record<string, KPIDefinition> = {
+   // Microclimate
+   'analysis_microclimate_temperature_c': {
++    id: 'analysis_microclimate_temperature_c',
+     category: AnalysisCategory.MICROCLIMATE,
+     metric: 'temperature',
+     unit: 'celsius',
+-    analysisType: 'quantitative'
++    analysisType: 'quantitative',
++    shortName: 'Temperature',
++    description: 'Ambient air temperature measured at object location',
++    descriptionShort: 'Air Temp (°C)',
++    defaultAggregation: 'average',
++    availableAggregations: ['average', 'min', 'max', 'withinBounds'],
++    interpretationHighLow: {
++      high: 'bad',
++      low: 'good',
++      explanation: 'Lower temperatures indicate better thermal comfort'
++    },
++    thresholds: { warning: 28, critical: 35 },
++    categories: [
++      { label: 'Comfortable', min: 15, max: 25, color: '#22c55e' },
++      { label: 'Warm', min: 25, max: 30, color: '#f59e0b' },
++      { label: 'Hot', min: 30, max: 50, color: '#ef4444' }
++    ]
+   },
+   'analysis_microclimate_humidity_percent': {
+     category: AnalysisCategory.MICROCLIMATE,
+@@ -404,14 +499,20 @@ interface CategoryDefinition {
+   }>;
+ }
+ 
+-// Example configuration
++// Field Categories = How we classify different types of data fields
++// This helps the system understand what type of data each field contains
+ const urbanAnalyticsConfig: FieldCategoryConfig = {
+   version: "1.0",
+   fieldCategories: {
++    // Analysis fields (carry KPI data)
+     "analysis_microclimate_temperature_c": AnalysisCategory.MICROCLIMATE,
+     "analysis_solar_annual_hours": AnalysisCategory.SOLAR_ACCESS,
++    // Metadata fields (describe the object)
+     "building_type": "metadata",
+-    "geometry.centroid": "geometry"
++    "speckle_type": "metadata",
++    // Geometry fields (spatial data)
++    "geometry.centroid": "geometry",
++    "geometry.bbox": "geometry"
+   },
+   kpiDefinitions: {
+     "analysis_microclimate_temperature_c": {
+@@ -458,11 +559,17 @@ interface ScorecardConfiguration {
+           type: 'histogram' | 'pie' | 'line' | 'bar' | 'scatter';
+           title: string;
+           field: string;
+-          aggregation?: 'sum' | 'average' | 'count' | 'max' | 'min';
++          // Extended aggregation types including "withinBounds" for threshold-based analysis
++          aggregation?: 'sum' | 'average' | 'count' | 'max' | 'min' | 'withinBounds';
++          // Arguments for withinBounds aggregation
++          aggregationArgs?: {
++            bounds: Array<{start: number, end: number, label: string}>;
++            countType: 'objects' | 'percentage';
++          };
+           binCount?: number;
+           colorScheme?: string;
+           clickAction: {
+-            type: 'filter' | 'highlight' | 'select';
++            type: 'filter' | 'highlight' | 'select' | 'none';
+             field?: string;
+           };
+         }
+@@ -472,25 +579,49 @@ interface ScorecardConfiguration {
+         [kpiId: string]: {
+           title: string;
+           field: string;
+-          aggregation: 'sum' | 'average' | 'count' | 'max' | 'min';
++          // Extended aggregation including percentile and withinBounds
++          aggregation: 'sum' | 'average' | 'count' | 'max' | 'min' | 'percentile' | 'withinBounds';
++          // Arguments for complex aggregations
++          aggregationArgs?: {
++            percentile?: number; // e.g., 90 for 90th percentile
++            bounds?: Array<{start: number, end: number}>; // for withinBounds
++            targetValue?: number; // for divergence calculations
++          };
+           format: string; // e.g., ".2f", ".0%", "$,.0f"
++
++          // Flexible threshold system supporting multiple threshold types
+           threshold?: {
+-            warning: number;
+-            critical: number;
++            type: 'absolute' | 'relative' | 'divergence';
++            // Absolute thresholds (fixed values)
++            warning?: number;
++            critical?: number;
++            // Relative thresholds (percentage of mean/median)
++            warningPercent?: number;
++            criticalPercent?: number;
++            // Divergence from target value
++            targetValue?: number;
++            maxDivergence?: number;
+           };
+-          trend?: {
++          // Version comparison instead of time trends
++          comparison?: {
+             enabled: boolean;
+-            period: 'month' | 'quarter' | 'year';
++            baseVersion: string; // Speckle commit ID to compare against
++            showDifference: boolean;
++            differenceType: 'absolute' | 'percentage';
+           };
+         }
+       };
+-
++      // Filters = Preset display configurations applied when scorecard activates
++      // These are NOT user controls, but automatic filters that shape what data is shown
++      // User can override these through chart interactions (clicking pie slices, etc.)
+       filters: {
+         [filterId: string]: {
+           type: 'range' | 'multiSelect' | 'timeRange' | 'category';
+           field: string;
+           defaultValue?: any;
+           options?: string[];
++          // Whether this filter can be overridden by user interactions
++          userOverridable: boolean;
+         }
+       };
+ 
+@@ -539,16 +670,22 @@ interface ScorecardConfiguration {
+           "aggregation": "count",
+           // For numeric data in pie charts, define categories:
+           "categories": {
+-            "Comfortable": {"field": "comfort_score", "range": [70, 100]},
+-            "Moderate": {"field": "comfort_score", "range": [40, 70]},
+-            "Uncomfortable": {"field": "comfort_score", "range": [0, 40]}
++            // KPI-based approach is cleaner and more reusable
++            // Each category references a pre-defined KPI with withinBounds aggregation
++            "Comfortable": { "kpiId": "comfort_comfortable" },
++            "Moderate": { "kpiId": "comfort_moderate" },
++            "Uncomfortable": { "kpiId": "comfort_uncomfortable" }
++            // These KPIs are defined in the KPI registry with withinBounds aggregation
++            // and their respective range configurations
+           },
+           "clickAction": {
+             "type": "highlight"
+           }
+         }
+       },
+-
++      // KPIs are defined separately in the KPI Registry and referenced here
++      // Each KPI card is a UI component displaying a formatted KPI value
++      // This section assigns KPIs to card positions in the scorecard layout
+       "kpis": {
+         "avg_temperature": {
+           "title": "Average Temperature",
+@@ -570,6 +707,10 @@ interface ScorecardConfiguration {
+ 
+       "filters": {
+         // Only these filters are active for this scorecard, others are disabled
++        // Scorecard filters are PRESETS, not user controls
++        // When scorecard activates: automatically apply these filters
++        // User interactions (chart clicks) can override these temporarily
++        // Switching scorecards resets to new scorecard's preset filters
+         "building_type": {
+           "type": "multiSelect", // Determines filter UI component and function
+           "field": "building_type",
+@@ -593,8 +734,9 @@ interface ScorecardConfiguration {
+ ```
+ 
+ ## Data Processing Pipeline
++### 1. Speckle to Deck.gl Transformation
+ 
+-### 1. Speckle to Kepler.gl Transformation
++**Note**: The platform uses deck.gl with a map framework (not kepler.gl directly), but leverages kepler.gl's proven data processing patterns.
+ 
+ ```typescript
+ interface DataProcessingPipeline {
+diff --git a/docs/URBAN_ANALYTICS_USER_FLOWS.md b/docs/URBAN_ANALYTICS_USER_FLOWS.md
+new file mode 100644
+index 00000000..d2c075e1
+--- /dev/null
++++ b/docs/URBAN_ANALYTICS_USER_FLOWS.md
+@@ -0,0 +1,180 @@
++# Urban Analytics Platform - User Flows
++
++## Overview
++
++This document describes key user flows for the Urban Analytics Platform, demonstrating how the data taxonomy and scorecard system work together to create engaging client experiences.
++
++## User Flow 1: Scorecard Exploration - Wind Comfort
++
++### Narrative
++As a planner evaluating a design variant, I want to open the Wind-Comfort scorecard, examine low-performance areas, and ask questions in context so that I understand where wind comfort fails and why.
++
++### Pre-conditions
++- The application is in Presentation mode
++- The side-panel lists available scorecards
++- Speckle data loaded with wind comfort analysis results
++
++### Main Flow
++
++**1. Open the scorecard**
++- User clicks "Wind Comfort" in the side-panel
++- The card turns active, showing:
++  - Large KPI: "Avg. Windspeed" (from KPI registry)
++  - Five-slice Lawson pie-chart (categories from KPI definitions)
++  - Static histogram (non-interactive, for context)
++
++**2. Canvas updates**
++- 3D map colors the wind-comfort grid by category
++- Areas below comfort threshold receive yellow call-outs
++- Preset filters applied: `geometry_type: "grid_cell"`, `analysis_type: "wind_comfort"`
++
++**3. Read annotations**
++- Hovering an annotation reveals tooltip:
++  *"Low shading near tower – strong gusts 11 AM – 3 PM"*
++- AI-generated based on spatial context and KPI values
++
++**4. Ask an in-place question**
++- Small "+" on call-out opens chat bubble anchored to that spot
++- User types: "Why is this spot so windy?"
++- AI receives: annotation position, local KPI values, nearby geometry
++- Inline AI answer appears with spatial context
++
++**5. Hover exploration**
++- Moving cursor across grid shows live tooltips
++- Displays: wind speed, comfort category, any extra configured metrics
++- Real-time KPI computation using optimized aggregation functions
++
++**6. Contextual chat anywhere**
++- User right-clicks any point on canvas
++- Text box appears
++- Question + answer anchored to that location
++- AI context includes: clicked position, visible KPIs, active filters
++
++**7. Filter via pie-chart**
++- User clicks pie slice "Comfortable while running"
++- Chart interaction triggers filter override
++- Non-matching cells fade out, selected category highlighted
++- KPI values recalculate for filtered subset
++
++**8. Toggle context layers**
++- Right-hand layer toolbar shows: Trees, Buildings, Grid
++- User hides Trees and Buildings for cleaner view
++- Layer visibility persists within current scorecard
++
++**9. Switch to another KPI**
++- User clicks "Thermal Heat-Intake" in side-panel
++- Canvas recolors buildings by heat-intake values
++- Trees reappear (defined in thermal scorecard configuration)
++- Previous filters reset to new scorecard's presets
++
++### Post-conditions
++- User understands wind-comfort hotspots and mitigation reasons
++- Chosen filters and layer visibility persist until new scorecard selected
++- AI chat history available for reference
++
++### Technical Implementation Notes
++- **Data Flow**: `grid_cells` dataset → `wind_comfort_category` field → pie chart categories
++- **KPI Computation**: Uses `withinBounds` aggregation for Lawson categories
++- **Filter Management**: Scorecard presets override user selections when switching
++- **AI Context**: Spatial position + active KPIs + visible geometry types
++
++---
++
++## User Flow 2: Overview/Summary Mode
++
++### Narrative
++As a client reviewing design options, I want to see a high-level overview of all key performance indicators across multiple analysis categories so that I can quickly understand the overall project performance and identify areas needing attention.
++
++### Pre-conditions
++- Application loaded with complete analysis dataset
++- Multiple analysis categories available (wind, solar, biodiversity, accessibility)
++- Comparison mode enabled with baseline/alternative scenarios
++
++### Main Flow
++
++**1. Enter overview mode**
++- User clicks "Overview" in the main navigation
++- Interface switches to dashboard layout
++- Multiple mini-scorecards displayed in grid format
++
++**2. Multi-category dashboard**
++- Grid shows 6 mini-scorecards:
++  - Wind Comfort (avg comfort score + status indicator)
++  - Solar Access (total sunshine hours + percentage above threshold)
++  - Biodiversity (species count + habitat quality index)
++  - Accessibility (walkability score + transit access)
++  - Thermal Comfort (avg temperature + heat stress zones)
++  - Air Quality (pollution levels + health impact score)
++
++**3. Status indicators**
++- Each mini-scorecard shows:
++  - Primary KPI value (large number)
++  - Status indicator (green/yellow/red based on thresholds)
++  - Trend arrow (improvement/decline vs. baseline)
++  - Sparkline chart showing distribution
++
++**4. Comparative analysis**
++- Toggle between "Current Design" and "Baseline Scenario"
++- Delta indicators show percentage changes
++- Color coding: green (improvement), red (decline), gray (neutral)
++
++**5. Drill-down interaction**
++- Click any mini-scorecard to open full scorecard view
++- Maintains overview context (breadcrumb navigation)
++- "Back to Overview" button preserves previous state
++
++**6. Spatial overview**
++- Canvas shows aggregated performance heatmap
++- Color intensity represents overall performance index
++- Hover reveals top 3 performing/underperforming KPIs for that area
++
++**7. AI summary generation**
++- "Generate Summary" button triggers AI analysis
++- AI processes all KPIs across all categories
++- Returns executive summary with:
++  - Top 3 strengths of the design
++  - Top 3 areas for improvement
++  - Specific recommendations with spatial references
++
++**8. Export and presentation**
++- "Export Dashboard" creates PDF summary
++- Includes all KPI values, charts, and AI insights
++- Formatted for client presentation
++
++### Post-conditions
++- User has comprehensive understanding of project performance
++- Key insights identified for detailed investigation
++- Summary materials prepared for stakeholder communication
++
++### Technical Implementation Notes
++- **Data Aggregation**: Cross-category KPI computation using multiple datasets
++- **Performance Index**: Weighted average of normalized KPI scores
++- **AI Processing**: Batch analysis of all KPIs with spatial context
++- **State Management**: Overview state preserved when drilling down to individual scorecards
++
++---
++
++## Data Taxonomy Alignment
++
++### Scorecard Flow Alignment
++✅ **Geometry Grouping**: Wind comfort uses `grid_cell` geometry type
++✅ **KPI Definitions**: Lawson categories from unified KPI registry
++✅ **Chart Configuration**: Pie chart with category-based aggregation
++✅ **Filter Presets**: Automatic scorecard-specific filtering
++✅ **AI Integration**: Contextual annotations with spatial awareness
++
++### Overview Flow Alignment
++✅ **Multi-Dataset**: Processes buildings, trees, roads, grid_cells simultaneously
++✅ **Cross-Category KPIs**: Aggregates across different analysis categories
++✅ **Comparison Mode**: Version-based comparison using Speckle commit IDs
++✅ **Status Thresholds**: Uses flexible threshold system (absolute/relative/divergence)
++✅ **AI Summarization**: Batch processing of spatial and analytical context
++
++### Complexity Management
++Both flows maintain simplicity while providing depth:
++- **Scorecard Flow**: One analysis type per view, progressive disclosure
++- **Overview Flow**: High-level aggregation with drill-down capability
++- **Consistent Navigation**: Clear mental model for switching between modes
++- **Preset-Based Configuration**: Reduces cognitive load, maintains focus
++
++This design ensures that complex urban analytics remain accessible to non-technical stakeholders while providing the depth needed for informed decision-making.
+\ No newline at end of file
+-- 
+2.49.0
+
+
+From d20ad53c3f020ec61cfd303028237cdb16ca7085 Mon Sep 17 00:00:00 2001
+From: SerjoschDuering <tralala798@gmail.com>
+Date: Thu, 17 Jul 2025 10:41:07 +0200
+Subject: [PATCH 3/3] docs: correct AI integration architecture for
+ Speckle-based annotations and region summaries
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Key corrections:
+- AI annotations stored as JSON on Speckle Point geometry objects
+- Region summaries stored as JSON on Speckle Curve/Polygon geometry objects
+- Pre-generated content loaded with main Speckle dataset, not generated real-time
+- Annotation visibility controlled by scorecard and filter settings
+- External LLM receives rich spatial context including region summaries, UI state, and screenshots
+- Updated user flows to reflect pre-generated annotation expansion to chat interface
+- Corrected state management to separate pre-generated data from real-time chat state
+
+Architecture now accurately reflects the preprocessing approach with external AI generation
+and Speckle geometry-based data storage for optimal performance and consistency.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+---
+ .../URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md | 197 ++++++++++++--
+ ...URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md | 254 +++++++++++++-----
+ docs/URBAN_ANALYTICS_USER_FLOWS.md            |  38 ++-
+ 3 files changed, 384 insertions(+), 105 deletions(-)
+
+diff --git a/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md b/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
+index 24f92a76..9337ddd9 100644
+--- a/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
++++ b/docs/URBAN_ANALYTICS_ARCHITECTURAL_INSIGHTS.md
+@@ -26,7 +26,9 @@ interface UrbanAnalyticsStore {
+     viewport: Viewport;
+     mapStyle: MapStyle;
+     bounds: Bounds;
+-    annotations: Annotation[];
++    // Pre-generated annotations (loaded with Speckle data)
++    annotations: PreGeneratedAnnotation[];
++    regionSummaries: RegionSummary[];
+   };
+ 
+   // UI state management with stable interface for canvas/map/visualization interactions
+@@ -41,12 +43,12 @@ interface UrbanAnalyticsStore {
+       selectedPanels: string[];
+       layoutMode: 'comparison' | 'single' | 'overview';
+     };
+-    // AI integration as part of UI state
++    // AI chat state (real-time interactions)
+     ai: {
+-      annotations: AIAnnotation[];
+-      insights: RegionalInsight[];
+-      chatHistory: ChatMessage[];
+-      isGenerating: boolean;
++      activeChatBubbles: ChatBubble[];     // Currently open chat interfaces
++      chatHistory: ChatMessage[];         // Conversation history
++      isGenerating: boolean;               // LLM response in progress
++      uiContext: UIContextSnapshot;       // Current state for AI context
+     };
+   };
+ 
+@@ -274,36 +276,173 @@ const UrbanKeplerGl = injectComponents([
+ 
+ ### 7. AI Integration Architecture
+ 
+-**User Journey for AI Integration:**
+-1. **Context-Aware Annotations**: User clicks on map → AI explains what they're seeing
+-2. **Insight Generation**: User selects objects → AI summarizes KPIs and relationships
+-3. **Comparative Analysis**: User switches between versions → AI highlights key differences
+-4. **Smart Explanations**: User hovers over KPI → AI provides contextual interpretation
++**Pre-generated Annotation System:**
++The platform uses a sophisticated annotation layer with pre-generated insights that adapt to user interactions and scorecard contexts.
+ 
+-**Stateless Annotation System:**
++**Core Components:**
++1. **Pre-generated Annotations**: Fixed spatial annotations with positions, created during external preprocessing
++2. **Region Summaries**: Analysis regions with summary KPIs + AI-generated descriptions (external preprocessing)
++3. **Contextual Chat**: Real-time AI responses using region summaries + UI context + external LLM
++
++**Architecture Overview:**
+ ```typescript
+-interface AIIntegration {
+-  // Annotation chat with external API
+-  generateAnnotationInsight: (
+-    annotation: Annotation,
+-    context: AnalysisContext
+-  ) => Promise<string>;
++interface AIAnnotationSystem {
++  // Pre-generated annotation data (loaded with Speckle data)
++  annotations: {
++    position: [number, number, number];    // 3D spatial position
++    id: string;
++    analysisCategory: AnalysisCategory;    // Links to specific scorecard
++    summaryText: string;                   // Pre-generated description
++    kpis: Record<string, number>;          // Associated KPI values
++    visibility: {
++      scorecards: string[];                // Which scorecards show this annotation
++      filterConditions: FilterCondition[]; // When to show/hide
++    };
++  }[];
++
++  // Region summary data (for contextual AI responses)
++  regionSummaries: {
++    regionId: string;
++    bbox: BoundingBox;                     // Spatial bounds
++    summaryKPIs: Record<string, number>;   // Aggregated KPIs for region
++    aiDescription: string;                 // Pre-generated AI description
++    analysisLayer: string;                 // Which analysis this belongs to
++  }[];
++
++  // Real-time chat integration
++  chatContext: {
++    currentScorecard: string;
++    activeFilters: Filter[];
++    visibleLayers: string[];
++    viewportState: Viewport;
++    screenshotCapability: boolean;         // For UI context
++  };
++}
++```
++
++**User Interaction Patterns:**
++
++**1. Annotation Expansion:**
++```typescript
++// User clicks on pre-existing annotation
++const handleAnnotationClick = (annotationId: string) => {
++  const annotation = getAnnotation(annotationId);
++  
++  // Expand annotation to show chat interface
++  showChatBubble({
++    position: annotation.position,
++    initialContent: annotation.summaryText,
++    context: {
++      annotation,
++      nearbyKPIs: getNearbyKPIs(annotation.position),
++      activeScorecard: getCurrentScorecard()
++    }
++  });
++};
++```
++
++**2. Contextual Spatial Chat:**
++```typescript
++// User clicks anywhere on canvas to ask question
++const handleCanvasClick = (position: [number, number, number]) => {
++  const context = gatherSpatialContext(position);
++  
++  showChatInterface({
++    position,
++    context: {
++      nearbyRegionSummaries: getRegionSummariesNear(position),
++      localKPIs: getKPIsAtPosition(position),
++      uiState: getCurrentUIState(),
++      screenshot: captureViewport(),       // For visual context
++      activeScorecard: getCurrentScorecard()
++    }
++  });
++};
++
++const gatherSpatialContext = (position) => ({
++  // Find relevant pre-generated region summaries
++  regionSummaries: regionSummaries.filter(region => 
++    isPointInBounds(position, region.bbox)
++  ),
++  // Extract local KPI values
++  localKPIs: extractKPIsAtPosition(position),
++  // Current UI context
++  visibleAnnotations: getVisibleAnnotations(),
++  activeFilters: getCurrentFilters(),
++  scorecardState: getCurrentScorecardState()
++});
++```
++
++**3. Visibility Management:**
++```typescript
++// Annotations visibility controlled by scorecard and filters
++const updateAnnotationVisibility = (scorecard: string, filters: Filter[]) => {
++  annotations.forEach(annotation => {
++    annotation.visible = 
++      annotation.visibility.scorecards.includes(scorecard) &&
++      annotation.visibility.filterConditions.every(condition =>
++        evaluateFilterCondition(condition, filters)
++      );
++  });
++};
++```
+ 
+-  // Regional summary insights
+-  generateRegionalSummary: (
+-    geometryData: GeometryObject[],
+-    kpis: KPIData[]
+-  ) => Promise<RegionalInsight>;
+-
+-  // Contextual explanations
+-  explainKPIResults: (
+-    kpi: string,
+-    value: number,
+-    context: SpatialContext
++**4. External LLM Integration:**
++```typescript
++interface ExternalLLMService {
++  askQuestion: (
++    question: string,
++    context: SpatialChatContext
+   ) => Promise<string>;
+ }
++
++interface SpatialChatContext {
++  // Pre-generated regional insights
++  regionSummaries: RegionSummary[];
++  annotationInsights: AnnotationData[];
++  
++  // Current state context
++  uiState: {
++    activeScorecard: string;
++    visibleLayers: string[];
++    activeFilters: Filter[];
++    selectedObjects: string[];
++  };
++  
++  // Visual context
++  screenshot?: string;               // Base64 encoded viewport capture
++  kpiValues: Record<string, number>; // Current KPI values at query location
++  
++  // Spatial context
++  queryPosition: [number, number, number];
++  nearbyGeometry: GeometryObject[];
++}
++
++const processContextualQuestion = async (
++  question: string, 
++  position: [number, number, number]
++) => {
++  const context: SpatialChatContext = {
++    regionSummaries: getRegionSummariesNear(position),
++    annotationInsights: getNearbyAnnotations(position),
++    uiState: getCurrentUIState(),
++    screenshot: await captureViewport(),
++    kpiValues: getKPIsAtPosition(position),
++    queryPosition: position,
++    nearbyGeometry: getGeometryNear(position)
++  };
++  
++  return await externalLLMService.askQuestion(question, context);
++};
+ ```
+ 
++**Key Benefits:**
++- **Performance**: Pre-generated annotations reduce real-time computation
++- **Consistency**: Standardized regional summaries ensure coherent explanations
++- **Context-Aware**: Rich spatial and UI context for better AI responses
++- **Scalable**: External preprocessing can handle complex analysis descriptions
++- **Interactive**: Seamless chat integration with existing annotations
++
+ ## Implementation Roadmap
+ 
+ ### Phase 1: Core Architecture (Weeks 1-2)
+diff --git a/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md b/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
+index 9f6ced20..02da03c6 100644
+--- a/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
++++ b/docs/URBAN_ANALYTICS_IMPLEMENTATION_PATTERNS.md
+@@ -29,7 +29,9 @@ interface UrbanAnalyticsStore {
+     viewport: Viewport;
+     mapStyle: MapStyle;
+     bounds: Bounds;
+-    annotations: Annotation[];
++    // Pre-generated annotations (loaded with Speckle data)
++    annotations: PreGeneratedAnnotation[];
++    regionSummaries: RegionSummary[];
+   };
+ 
+   // UI state with stable interface for visualization interactions
+@@ -43,12 +45,12 @@ interface UrbanAnalyticsStore {
+       selectedPanels: string[];
+       layoutMode: 'comparison' | 'single' | 'overview';
+     };
+-    // AI integration as part of UI state
++    // AI chat state (real-time interactions)
+     ai: {
+-      annotations: AIAnnotation[];
+-      insights: RegionalInsight[];
+-      chatHistory: ChatMessage[];
+-      isGenerating: boolean;
++      activeChatBubbles: ChatBubble[];     // Currently open chat interfaces
++      chatHistory: ChatMessage[];         // Conversation history
++      isGenerating: boolean;               // LLM response in progress
++      uiContext: UIContextSnapshot;       // Current state for AI context
+     };
+   };
+ 
+@@ -735,48 +737,150 @@ const useOptimizedSelectors = () => {
+ };
+ ```
+ 
+-## 7. AI Integration Patterns
++## 7. AI Integration Patterns - Speckle-Based Annotations
++
++**Architecture Overview:**
++AI annotations and region summaries are stored directly in Speckle geometry objects as JSON data, loaded with the main dataset.
+ 
+ ```typescript
+-interface AIService {
+-  generateAnnotationInsight(
+-    annotation: Annotation,
+-    context: AnalysisContext
+-  ): Promise<string>;
+-
+-  generateRegionalSummary(
+-    geometryData: GeometryObject[],
+-    kpis: KPIData[]
+-  ): Promise<RegionalInsight>;
++// Speckle geometry object with attached annotation data
++interface SpeckleAnnotationGeometry {
++  id: string;
++  speckle_type: 'Point'; // Point geometry for annotations
++  geometry: {
++    coordinates: [number, number, number]; // 3D position
++  };
++  // JSON annotation data attached to geometry
++  annotationData: {
++    summaryText: string;                   // Pre-generated AI description
++    analysisCategory: AnalysisCategory;    // Which analysis this relates to
++    kpis: Record<string, number>;          // Associated KPI values
++    visibility: {
++      scorecards: string[];                // Which scorecards show this
++      filterConditions: FilterCondition[]; // When to show/hide
++    };
++  };
++}
++
++// Speckle geometry object with region summary data
++interface SpeckleRegionGeometry {
++  id: string;
++  speckle_type: 'Curve' | 'Polygon';     // Boundary geometry for regions
++  geometry: {
++    boundary: Polygon;                     // Region boundary
++  };
++  // JSON region summary attached to geometry
++  regionData: {
++    summaryKPIs: Record<string, number>;   // Aggregated stats for region
++    aiDescription: string;                 // Pre-generated AI description
++    analysisLayer: string;                 // Which analysis layer
++  };
++}
++
++// Data extraction from Speckle objects
++class SpeckleAIDataExtractor {
++  extractAnnotations(speckleObjects: SpeckleObject[]): PreGeneratedAnnotation[] {
++    return speckleObjects
++      .filter(obj => obj.speckle_type === 'Point' && obj.annotationData)
++      .map(obj => ({
++        id: obj.id,
++        position: obj.geometry.coordinates,
++        summaryText: obj.annotationData.summaryText,
++        analysisCategory: obj.annotationData.analysisCategory,
++        kpis: obj.annotationData.kpis,
++        visibility: obj.annotationData.visibility
++      }));
++  }
++
++  extractRegionSummaries(speckleObjects: SpeckleObject[]): RegionSummary[] {
++    return speckleObjects
++      .filter(obj => 
++        ['Curve', 'Polygon'].includes(obj.speckle_type) && 
++        obj.regionData
++      )
++      .map(obj => ({
++        regionId: obj.id,
++        bbox: this.calculateBoundingBox(obj.geometry.boundary),
++        summaryKPIs: obj.regionData.summaryKPIs,
++        aiDescription: obj.regionData.aiDescription,
++        analysisLayer: obj.regionData.analysisLayer,
++        geometry: obj.geometry.boundary
++      }));
++  }
++
++  private calculateBoundingBox(boundary: Polygon): BoundingBox {
++    // Calculate bbox from polygon coordinates
++    const coords = boundary.coordinates[0];
++    return {
++      minX: Math.min(...coords.map(c => c[0])),
++      minY: Math.min(...coords.map(c => c[1])),
++      maxX: Math.max(...coords.map(c => c[0])),
++      maxY: Math.max(...coords.map(c => c[1]))
++    };
++  }
+ }
+ 
+-class UrbanAnalyticsAIService implements AIService {
+-  private apiUrl: string;
+-  private apiKey: string;
++// Annotation management with Speckle integration
++class SpeckleAnnotationManager {
++  private annotations: PreGeneratedAnnotation[];
++  private regionSummaries: RegionSummary[];
+ 
+-  constructor(config: { apiUrl: string; apiKey: string }) {
+-    this.apiUrl = config.apiUrl;
+-    this.apiKey = config.apiKey;
++  constructor(speckleObjects: SpeckleObject[]) {
++    const extractor = new SpeckleAIDataExtractor();
++    this.annotations = extractor.extractAnnotations(speckleObjects);
++    this.regionSummaries = extractor.extractRegionSummaries(speckleObjects);
++  }
++
++  updateVisibilityByScorecard(scorecardId: string, activeFilters: Filter[]) {
++    this.annotations.forEach(annotation => {
++      annotation.visible = 
++        annotation.visibility.scorecards.includes(scorecardId) &&
++        annotation.visibility.filterConditions.every(condition =>
++          this.evaluateFilterCondition(condition, activeFilters)
++        );
++    });
+   }
+ 
+-  async generateAnnotationInsight(
+-    annotation: Annotation,
+-    context: AnalysisContext
++  getRegionSummaryAtPosition(position: [number, number, number]): RegionSummary | null {
++    return this.regionSummaries.find(region =>
++      this.isPointInRegion(position, region.geometry)
++    );
++  }
++
++  getNearbyAnnotations(position: [number, number, number], radius = 100): PreGeneratedAnnotation[] {
++    return this.annotations.filter(annotation =>
++      this.calculateDistance(position, annotation.position) <= radius
++    );
++  }
++}
++
++// External LLM service with Speckle context
++class ExternalLLMService {
++  async askSpatialQuestion(
++    question: string,
++    context: SpatialChatContext
+   ): Promise<string> {
+     const payload = {
+-      annotation: {
+-        type: annotation.type,
+-        position: annotation.position,
+-        content: annotation.content
+-      },
++      question,
+       context: {
+-        selectedObjects: context.selectedObjects,
+-        kpis: context.kpis,
+-        timeRange: context.timeRange
++        // Speckle-based data
++        regionSummary: context.regionSummary?.aiDescription,
++        regionKPIs: context.regionSummary?.summaryKPIs,
++        nearbyAnnotations: context.nearbyAnnotations.map(a => a.summaryText),
++        
++        // Current UI state
++        activeScorecard: context.uiState.activeScorecard,
++        visibleLayers: context.uiState.visibleLayers,
++        activeFilters: context.uiState.activeFilters,
++        
++        // Visual context
++        screenshot: context.screenshot,
++        queryPosition: context.queryPosition,
++        localKPIs: context.kpiValues
+       }
+     };
+ 
+-    const response = await fetch(`${this.apiUrl}/annotations/insights`, {
++    const response = await fetch(`${this.apiUrl}/spatial/chat`, {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+@@ -785,41 +889,67 @@ class UrbanAnalyticsAIService implements AIService {
+       body: JSON.stringify(payload)
+     });
+ 
+-    const result = await response.json();
+-    return result.insight;
++    return (await response.json()).response;
+   }
++}
+ 
+-  async generateRegionalSummary(
+-    geometryData: GeometryObject[],
+-    kpis: KPIData[]
+-  ): Promise<RegionalInsight> {
+-    const aggregatedData = this.aggregateRegionalData(geometryData, kpis);
+-
+-    const response = await fetch(`${this.apiUrl}/regional/summary`, {
+-      method: 'POST',
+-      headers: {
+-        'Content-Type': 'application/json',
+-        'Authorization': `Bearer ${this.apiKey}`
+-      },
+-      body: JSON.stringify({ data: aggregatedData })
++// Complete chat integration
++class SpatialChatManager {
++  constructor(
++    private annotationManager: SpeckleAnnotationManager,
++    private llmService: ExternalLLMService
++  ) {}
++
++  // Handle click on pre-existing Speckle annotation
++  handleAnnotationClick(annotationId: string): ChatBubble {
++    const annotation = this.annotationManager.getAnnotation(annotationId);
++    
++    return this.createChatBubble({
++      position: annotation.position,
++      initialContent: annotation.summaryText,
++      context: {
++        annotation,
++        regionSummary: this.annotationManager.getRegionSummaryAtPosition(annotation.position),
++        activeScorecard: this.getCurrentScorecard()
++      }
+     });
+-
+-    return await response.json();
+   }
+ 
+-  private aggregateRegionalData(
+-    geometryData: GeometryObject[],
+-    kpis: KPIData[]
+-  ): RegionalAggregation {
+-    // Implement spatial aggregation logic
+-    return {
+-      totalObjects: geometryData.length,
+-      avgKPIs: this.computeAverageKPIs(kpis),
+-      spatialDistribution: this.computeSpatialDistribution(geometryData),
+-      trends: this.identifyTrends(kpis)
++  // Handle click anywhere on canvas
++  async handleCanvasClick(
++    position: [number, number, number], 
++    question: string
++  ): Promise<ChatBubble> {
++    const context: SpatialChatContext = {
++      // Speckle-based contextual data
++      regionSummary: this.annotationManager.getRegionSummaryAtPosition(position),
++      nearbyAnnotations: this.annotationManager.getNearbyAnnotations(position),
++      
++      // Current state
++      uiState: this.getCurrentUIState(),
++      queryPosition: position,
++      screenshot: await this.captureViewport(),
++      kpiValues: this.getKPIsAtPosition(position)
+     };
++
++    const response = await this.llmService.askSpatialQuestion(question, context);
++    
++    return this.createChatBubble({
++      position,
++      content: response,
++      context
++    });
+   }
+ }
++
++interface SpatialChatContext {
++  regionSummary: RegionSummary | null;       // From Speckle curve/polygon geometry
++  nearbyAnnotations: PreGeneratedAnnotation[]; // From Speckle point geometry
++  uiState: UIState;
++  queryPosition: [number, number, number];
++  screenshot: string;
++  kpiValues: Record<string, number>;
++}
+ ```
+ 
+ These implementation patterns provide a solid foundation for building the Urban Analytics Platform, leveraging kepler.gl's proven architecture while adapting it for BIM/Speckle data integration, real-time scorecard interactions, and AI-powered insights.
+diff --git a/docs/URBAN_ANALYTICS_USER_FLOWS.md b/docs/URBAN_ANALYTICS_USER_FLOWS.md
+index d2c075e1..72e6c740 100644
+--- a/docs/URBAN_ANALYTICS_USER_FLOWS.md
++++ b/docs/URBAN_ANALYTICS_USER_FLOWS.md
+@@ -28,27 +28,33 @@ As a planner evaluating a design variant, I want to open the Wind-Comfort scorec
+ - Areas below comfort threshold receive yellow call-outs
+ - Preset filters applied: `geometry_type: "grid_cell"`, `analysis_type: "wind_comfort"`
+ 
+-**3. Read annotations**
+-- Hovering an annotation reveals tooltip:
++**3. Read pre-generated annotations**
++- Hovering a pre-existing annotation reveals tooltip:
+   *"Low shading near tower – strong gusts 11 AM – 3 PM"*
+-- AI-generated based on spatial context and KPI values
++- Annotations are pre-generated during external preprocessing
++- Visibility controlled by current scorecard and filter settings
+ 
+-**4. Ask an in-place question**
+-- Small "+" on call-out opens chat bubble anchored to that spot
+-- User types: "Why is this spot so windy?"
+-- AI receives: annotation position, local KPI values, nearby geometry
+-- Inline AI answer appears with spatial context
++**4. Expand annotation to chat**
++- Click on pre-existing annotation expands it to show chat interface
++- Initial content shows pre-generated summary text
++- User can ask follow-up questions: "Why is this spot so windy?"
++- AI receives: annotation data, region summaries, UI context, screenshot
++- Enhanced answer combines pre-generated insights with real-time context
+ 
+ **5. Hover exploration**
+ - Moving cursor across grid shows live tooltips
+ - Displays: wind speed, comfort category, any extra configured metrics
+ - Real-time KPI computation using optimized aggregation functions
+ 
+-**6. Contextual chat anywhere**
+-- User right-clicks any point on canvas
+-- Text box appears
+-- Question + answer anchored to that location
+-- AI context includes: clicked position, visible KPIs, active filters
++**6. Contextual spatial chat**
++- User right-clicks anywhere on canvas to ask region-specific questions
++- Chat interface appears anchored to that location
++- AI context includes: 
++  - Nearby region summaries (pre-generated)
++  - Local KPI values at clicked position
++  - Current UI state and active scorecard
++  - Screenshot for visual context
++  - Nearby geometry and annotations
+ 
+ **7. Filter via pie-chart**
+ - User clicks pie slice "Comfortable while running"
+@@ -76,7 +82,11 @@ As a planner evaluating a design variant, I want to open the Wind-Comfort scorec
+ - **Data Flow**: `grid_cells` dataset → `wind_comfort_category` field → pie chart categories
+ - **KPI Computation**: Uses `withinBounds` aggregation for Lawson categories
+ - **Filter Management**: Scorecard presets override user selections when switching
+-- **AI Context**: Spatial position + active KPIs + visible geometry types
++- **AI Architecture**: 
++  - Pre-generated annotations loaded with Speckle data
++  - Region summaries provide contextual AI responses
++  - External LLM integration with rich spatial context
++  - Screenshot capture for visual understanding
+ 
+ ---
+ 
+-- 
+2.49.0
+
